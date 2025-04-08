@@ -12,6 +12,7 @@ contract PresaleFactory is Ownable {
     using SafeERC20 for IERC20;
     using Address for address payable;
 
+    mapping(address => bool) public whitelistedCreators;
     uint256 public creationFee;
     address public feeToken;
     address[] public presales;
@@ -21,7 +22,7 @@ contract PresaleFactory is Ownable {
     error InsufficientFee();
     error ZeroFee();
 
-    event PresaleCreated(address indexed creator, address indexed presale);
+    event PresaleCreated(address indexed creator, address indexed presale, address token, uint256 start, uint256 end);
 
     constructor(uint256 _creationFee, address _feeToken) Ownable(msg.sender) {
         creationFee = _creationFee;
@@ -33,6 +34,7 @@ contract PresaleFactory is Ownable {
     function createPresale(Presale.PresaleOptions memory _options, address _token, address _weth, address _router)
         external
         payable
+        returns (address)
     {
         if (feeToken == address(0)) {
             if (msg.value < creationFee) revert InsufficientFee();
@@ -42,7 +44,8 @@ contract PresaleFactory is Ownable {
 
         Presale presale = new Presale(_weth, _token, _router, _options, msg.sender, address(liquidityLocker));
         presales.push(address(presale));
-        emit PresaleCreated(msg.sender, address(presale));
+        emit PresaleCreated(msg.sender, address(presale), _token, _options.start, _options.end);
+        return address(presale);
     }
 
     function setCreationFee(uint256 _fee) external onlyOwner {
@@ -66,5 +69,9 @@ contract PresaleFactory is Ownable {
 
     function getPresaleCount() external view returns (uint256) {
         return presales.length;
+    }
+
+    function getPresales() external view returns (address[] memory) {
+        return presales;
     }
 }
