@@ -9,9 +9,6 @@ pragma solidity ^0.8.24;
  * operations in the context of a presale event.
  */
 interface IPresale {
-
- 
-    
     /**
      * @dev Emitted when an unauthorized address attempts an action requiring specific permissions.
      */
@@ -83,7 +80,6 @@ interface IPresale {
      */
     error InvalidLiquidityValue();
 
-
     /**
      * @dev Emitted when the pool validation parameters provided to the contract are invalid.
      */
@@ -125,7 +121,7 @@ interface IPresale {
     event Refund(address indexed contributor, uint256 amount, uint256 timestamp);
 
     /**
-     * @dev Emitted when participants claim their purchased tokens after the presale is finalized. 
+     * @dev Emitted when participants claim their purchased tokens after the presale is finalized.
      * @param claimer Address of the participant claiming tokens.
      * @param amount Amount of tokens claimed.
      * @param timestamp Block timestamp when the claim occurred.
@@ -144,7 +140,7 @@ interface IPresale {
      * @dev Allows for the deposit of presale tokens by the owner.
      * This function is intended to be called by the presale contract owner to
      * deposit the tokens that are to be sold during the presale.
-     * 
+     *
      * @return The amount of tokens deposited for the presale.
      */
     function deposit() external returns (uint256);
@@ -154,7 +150,7 @@ interface IPresale {
      * participants and the withdrawal of funds raised to the beneficiary. This
      * function is typically called after the presale ends, assuming it meets
      * any predefined criteria such as minimum funding goals.
-     * 
+     *
      * @return A boolean value indicating whether the presale was successfully
      * finalized.
      */
@@ -164,7 +160,7 @@ interface IPresale {
      * @dev Cancels the presale and enables the refund process for participants.
      * This function can be used in scenarios where the presale does not meet
      * its goals or if the organizer decides to cancel the event for any reason.
-     * 
+     *
      * @return A boolean value indicating whether the presale was successfully
      * cancelled.
      */
@@ -174,7 +170,7 @@ interface IPresale {
      * @dev Allows participants to claim their purchased tokens after the presale
      * is finalized. Participants call this function to receive the tokens they
      * are entitled to.
-     * 
+     *
      * @return The amount of tokens claimed by the caller.
      */
     function claim() external returns (uint256);
@@ -183,7 +179,7 @@ interface IPresale {
      * @dev Enables participants to request a refund of their contribution if the
      * presale is cancelled or if they are otherwise eligible for a refund
      * according to the presale's terms.
-     * 
+     *
      * @return The amount of funds refunded to the caller.
      */
     function refund() external returns (uint256);

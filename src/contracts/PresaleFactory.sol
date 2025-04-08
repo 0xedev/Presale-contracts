@@ -12,7 +12,6 @@ contract PresaleFactory is Ownable {
     using SafeERC20 for IERC20;
     using Address for address payable;
 
-
     uint256 public creationFee;
     address public feeToken;
     address[] public presales;
@@ -31,26 +30,17 @@ contract PresaleFactory is Ownable {
         liquidityLocker.transferOwnership(address(this));
     }
 
-    function createPresale(
-        Presale.PresaleOptions memory _options,
-        address _token,
-        address _weth,
-        address _router
-    ) external payable {
+    function createPresale(Presale.PresaleOptions memory _options, address _token, address _weth, address _router)
+        external
+        payable
+    {
         if (feeToken == address(0)) {
             if (msg.value < creationFee) revert InsufficientFee();
         } else {
             IERC20(feeToken).safeTransferFrom(msg.sender, address(this), creationFee);
         }
 
-        Presale presale = new Presale(
-            _weth,
-            _token,
-            _router,
-            _options,
-            msg.sender,
-            address(liquidityLocker)
-        );
+        Presale presale = new Presale(_weth, _token, _router, _options, msg.sender, address(liquidityLocker));
         presales.push(address(presale));
         emit PresaleCreated(msg.sender, address(presale));
     }

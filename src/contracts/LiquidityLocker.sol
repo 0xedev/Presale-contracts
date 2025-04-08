@@ -31,24 +31,14 @@ contract LiquidityLocker is Ownable {
 
     constructor() Ownable(msg.sender) {}
 
-    function lock(
-        address _token,
-        uint256 _amount,
-        uint256 _unlockTime,
-        address _owner
-    ) external onlyOwner {
+    function lock(address _token, uint256 _amount, uint256 _unlockTime, address _owner) external onlyOwner {
         if (_token == address(0)) revert InvalidTokenAddress();
         if (_amount == 0) revert ZeroAmount();
         if (_unlockTime <= block.timestamp) revert InvalidUnlockTime();
         if (_owner == address(0)) revert InvalidOwnerAddress();
 
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
-        locks.push(Lock({
-            token: _token,
-            amount: _amount,
-            unlockTime: _unlockTime,
-            owner: _owner
-        }));
+        locks.push(Lock({token: _token, amount: _amount, unlockTime: _unlockTime, owner: _owner}));
 
         emit LiquidityLocked(_token, _amount, _unlockTime, _owner);
     }
