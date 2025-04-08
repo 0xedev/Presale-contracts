@@ -9,6 +9,8 @@ import {Presale} from "./Presale.sol";
 import {LiquidityLocker} from "./LiquidityLocker.sol";
 
 contract PresaleFactory is Ownable {
+    LiquidityLocker public liquidityLocker;
+
     using SafeERC20 for IERC20;
     using Address for address payable;
 
@@ -16,7 +18,6 @@ contract PresaleFactory is Ownable {
     uint256 public creationFee;
     address public feeToken;
     address[] public presales;
-    LiquidityLocker public liquidityLocker;
 
     // Custom errors
     error InsufficientFee();

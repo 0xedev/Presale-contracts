@@ -51,7 +51,7 @@ contract PresaleFactoryTest is Test, PresaleFactoryEvents {
     receive() external payable {}
 
     // Deployment Tests
-    function test_DeploySuccessfullyWithCorrectFeeAndToken_ETH() public {
+    function test_DeploySuccessfullyWithCorrectFeeAndToken_ETH() public view {
         assertEq(factory.creationFee(), creationFee, "Creation fee mismatch");
         assertEq(factory.feeToken(), address(0), "Fee token mismatch");
         assertTrue(address(factory.liquidityLocker()) != address(0), "LiquidityLocker not set");
@@ -64,7 +64,7 @@ contract PresaleFactoryTest is Test, PresaleFactoryEvents {
         assertTrue(address(factory.liquidityLocker()) != address(0), "LiquidityLocker not set");
     }
 
-    function test_Ownership() public {
+    function test_Ownership() public view {
         assertEq(factory.owner(), owner, "Deployer is not owner");
     }
 
@@ -125,10 +125,7 @@ contract PresaleFactoryTest is Test, PresaleFactoryEvents {
         feeToken.approve(address(factory), creationFee - 1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IERC20Errors.ERC20InsufficientAllowance.selector,
-                address(factory),
-                creationFee - 1,
-                creationFee
+                IERC20Errors.ERC20InsufficientAllowance.selector, address(factory), creationFee - 1, creationFee
             )
         );
         factory.createPresale(options, token, weth, router);
