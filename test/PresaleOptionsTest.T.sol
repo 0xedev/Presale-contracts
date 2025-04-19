@@ -43,6 +43,7 @@ contract PresaleOptionsTest is Test {
     }
 
     function test_RevertIfStartInPast() public {
+        vm.warp(block.timestamp + 2 days); // Set timestamp forward to avoid underflow
         Presale.PresaleOptions memory invalidOptions = options;
         invalidOptions.start = block.timestamp - 1 days;
         invalidOptions.end = block.timestamp - 1 hours; // Ensure end > start

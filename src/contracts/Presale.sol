@@ -14,7 +14,7 @@ import {LiquidityLocker} from "./LiquidityLocker.sol";
 
 contract Presale is IPresale, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
-    using SafeERC20 for ERC20; // Ensure SafeERC20 works with ERC20
+    using SafeERC20 for ERC20; 
     using Address for address payable;
 
     uint256 public constant BASIS_POINTS = 10_000;

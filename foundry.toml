@@ -6,10 +6,10 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
-remmapings = [
-    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
-    "v2-core/=lib/v2-core/",
-    "v2-periphery/=lib/v2-periphery/",
-]
+[rpc_endpoints]
+sepolia = "${SEPOLIA_RPC_URL}"
 
-# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+[profile.remappings]
+"@openzeppelin/contracts/" = "lib/openzeppelin-contracts/contracts/"
+"v2-core/" = "lib/v2-core/"
+"v2-periphery/" = "lib/v2-periphery/"
