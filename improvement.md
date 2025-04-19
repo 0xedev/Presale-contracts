@@ -1,6 +1,1 @@
-Feature Benefit
-🚀 Whitelisted tier-based presale Reward early users or community members with better terms
-
-option for leftover token from presale (auto-burn or return unsold tokens to a vesting)
-liquidityBps must be over 70% {dropdown to select}
-token vesting smart contract
+lets use a custom \_burn instead and also i think presale.sol is too crowded, we can move some parts away from it. less i forget i implemented house% to cap at 500bps, dont worry about the implementation i did it already

@@ -6,15 +6,16 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IUniswapV2Router02} from "lib/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import {IUniswapV2Factory} from "lib/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import {IUniswapV2Router02} from "v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import {IUniswapV2Factory} from "v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import {IPresale} from "./interfaces/IPresale.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {LiquidityLocker} from "./LiquidityLocker.sol";
+import {Vesting} from "./Vesting.sol";
 
 contract Presale is IPresale, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
-    using SafeERC20 for ERC20; 
+    using SafeERC20 for ERC20;
     using Address for address payable;
 
     uint256 public constant BASIS_POINTS = 10_000;
@@ -24,6 +25,9 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     uint256 public ownerBalance;
 
     LiquidityLocker public immutable liquidityLocker;
+    Vesting public immutable vestingContract;
+    uint256 public immutable housePercentage; // Set by factory
+    address public immutable houseAddress; // Set by factory
 
     struct PresaleOptions {
         uint256 tokenDeposit;
@@ -38,13 +42,16 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         uint256 presaleRate;
         uint256 listingRate;
         uint256 lockupDuration;
-        address currency; // ERC20 or address(0) for ETH
+        address currency;
+        uint256 vestingPercentage;
+        uint256 vestingDuration;
+        uint8 leftoverTokenOption; // 0 = return, 1 = burn, 2 = vest
     }
 
     struct Pool {
         ERC20 token;
         IUniswapV2Router02 uniswapV2Router02;
-        address factory; // Added for pair address calculation
+        address factory;
         uint256 tokenBalance;
         uint256 tokensClaimable;
         uint256 tokensLiquidity;
@@ -58,6 +65,8 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     mapping(address => bool) public whitelist;
     address[] public contributors;
     Pool public pool;
+
+    uint256[] private constant ALLOWED_LIQUIDITY_BPS = [5000, 6000, 7000, 8000, 9000, 10000];
 
     error ContractPaused();
     error ETHNotAccepted();
@@ -79,6 +88,14 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     error NotPaused();
     error ZeroTokensForContribution();
     error InvalidInitialization();
+    error InvalidVestingPercentage();
+    error InvalidVestingDuration();
+    error InvalidLeftoverTokenOption();
+    error InvalidLiquidityBps();
+    error InvalidVestingPercentage();
+    error InvalidVestingDuration();
+    error InvalidHousePercentage();
+    error InvalidHouseAddress();
 
     event Paused(address indexed account);
     event Unpaused(address indexed account);
@@ -87,6 +104,10 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     event WhitelistToggled(bool enabled);
     event WhitelistUpdated(address indexed contributor, bool added);
     event Contribution(address indexed contributor, uint256 amount, bool isETH);
+    event LeftoverTokensReturned(uint256 amount, address indexed beneficiary);
+    event LeftoverTokensBurned(uint256 amount);
+    event LeftoverTokensVested(uint256 amount, address indexed beneficiary);
+    event HouseFundsDistributed(address indexed house, uint256 amount);
 
     modifier whenNotPaused() {
         if (paused) revert ContractPaused();
@@ -106,17 +127,26 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         address _uniswapV2Router02,
         PresaleOptions memory _options,
         address _creator,
-        address _liquidityLocker
+        address _liquidityLocker,
+        address _vestingContract,
+        uint256 _housePercentage,
+        address _houseAddress
     ) Ownable(_creator) {
         if (
             _weth == address(0) || _token == address(0) || _uniswapV2Router02 == address(0)
-                || _liquidityLocker == address(0)
+                || _liquidityLocker == address(0) || _vestingContract == address(0)
         ) {
             revert InvalidInitialization();
         }
+        if (_options.leftoverTokenOption > 2) revert InvalidLeftoverTokenOption();
+        if (_housePercentage > 5000) revert InvalidHousePercentage();
+        if (_houseAddress == address(0) && _housePercentage > 0) revert InvalidHouseAddress();
         _prevalidatePool(_options);
 
         liquidityLocker = LiquidityLocker(_liquidityLocker);
+        vestingContract = Vesting(_vestingContract);
+        housePercentage = _housePercentage;
+        houseAddress = _houseAddress;
         pool = Pool({
             token: ERC20(_token),
             uniswapV2Router02: IUniswapV2Router02(_uniswapV2Router02),
@@ -196,6 +226,31 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         return amount;
     }
 
+    function _handleLeftoverTokens() private {
+        // Calculate unsold tokens
+        uint256 tokensForPresale = _tokensForPresale();
+        uint256 unsoldTokens = tokensForPresale > pool.tokensClaimable
+            ? pool.tokenBalance - (pool.tokensClaimable + pool.tokensLiquidity)
+            : pool.tokenBalance - pool.tokensLiquidity;
+        if (unsoldTokens == 0) return;
+
+        pool.tokenBalance -= unsoldTokens;
+        if (pool.options.leftoverTokenOption == 0) {
+            // Return to creator
+            pool.token.safeTransfer(owner(), unsoldTokens);
+            emit LeftoverTokensReturned(unsoldTokens, owner());
+        } else if (pool.options.leftoverTokenOption == 1) {
+            // Burn by sending to address(0)
+            pool.token.safeTransfer(address(0), unsoldTokens);
+            emit LeftoverTokensBurned(unsoldTokens);
+        } else {
+            // Vest for the owner
+            pool.token.approve(address(vestingContract), unsoldTokens);
+            vestingContract.createVesting(owner(), unsoldTokens, block.timestamp, pool.options.vestingDuration);
+            emit LeftoverTokensVested(unsoldTokens, owner());
+        }
+    }
+
     function finalize() external onlyOwner whenNotPaused returns (bool) {
         if (pool.state != 2) revert InvalidState(pool.state);
         if (pool.weiRaised < pool.options.softCap) revert SoftCapNotReached();
@@ -204,8 +259,23 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         uint256 liquidityAmount = _weiForLiquidity();
         _liquify(liquidityAmount, pool.tokensLiquidity);
         pool.tokenBalance -= pool.tokensLiquidity;
-        ownerBalance = pool.weiRaised - liquidityAmount;
+
+        // Distribute house percentage
+        uint256 houseAmount = (pool.weiRaised * housePercentage) / BASIS_POINTS;
+        if (houseAmount > 0) {
+            if (pool.options.currency == address(0)) {
+                payable(houseAddress).sendValue(houseAmount);
+            } else {
+                IERC20(pool.options.currency).safeTransfer(houseAddress, houseAmount);
+            }
+            emit HouseFundsDistributed(houseAddress, houseAmount);
+        }
+
+        ownerBalance = pool.weiRaised - liquidityAmount - houseAmount;
         claimDeadline = block.timestamp + 90 days;
+
+        // Handle leftover tokens
+        _handleLeftoverTokens();
 
         emit Finalized(msg.sender, pool.weiRaised, block.timestamp);
         return true;
@@ -214,10 +284,12 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     function cancel() external nonReentrant onlyOwner whenNotPaused returns (bool) {
         if (pool.state > 2) revert InvalidState(pool.state);
         pool.state = 3;
+        // Return all deposited tokens to creator
         if (pool.tokenBalance > 0) {
             uint256 amount = pool.tokenBalance;
             pool.tokenBalance = 0;
             pool.token.safeTransfer(msg.sender, amount);
+            emit LeftoverTokensReturned(amount, msg.sender);
         }
         emit Cancel(msg.sender, block.timestamp);
         return true;
@@ -226,15 +298,30 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     function claim() external nonReentrant whenNotPaused returns (uint256) {
         if (pool.state != 4) revert InvalidState(pool.state);
         if (block.timestamp > claimDeadline) revert ClaimPeriodExpired();
-        uint256 amount = userTokens(msg.sender);
-        if (amount == 0) revert NoTokensToClaim();
-        if (pool.tokenBalance < amount) revert InsufficientTokenBalance();
+        uint256 totalTokens = userTokens(msg.sender);
+        if (totalTokens == 0) revert NoTokensToClaim();
+        if (pool.tokenBalance < totalTokens) revert InsufficientTokenBalance();
 
-        pool.tokenBalance -= amount;
+        pool.tokenBalance -= totalTokens;
         contributions[msg.sender] = 0;
-        pool.token.safeTransfer(msg.sender, amount);
-        emit TokenClaim(msg.sender, amount, block.timestamp);
-        return amount;
+
+        uint256 vestingBps = pool.options.vestingPercentage;
+        uint256 vestedTokens = (totalTokens * vestingBps) / BASIS_POINTS;
+        uint256 immediateTokens = totalTokens - vestedTokens;
+
+        // Transfer immediate tokens
+        if (immediateTokens > 0) {
+            pool.token.safeTransfer(msg.sender, immediateTokens);
+        }
+
+        // Set up vesting for vested tokens
+        if (vestedTokens > 0) {
+            pool.token.approve(address(vestingContract), vestedTokens);
+            vestingContract.createVesting(msg.sender, vestedTokens, block.timestamp, pool.options.vestingDuration);
+        }
+
+        emit TokenClaim(msg.sender, totalTokens, block.timestamp);
+        return totalTokens;
     }
 
     function refund() external nonReentrant onlyRefundable returns (uint256) {
@@ -379,13 +466,23 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         if (_options.tokenDeposit == 0) revert InvalidInitialization();
         if (_options.hardCap == 0 || _options.softCap < _options.hardCap / 4) revert InvalidInitialization();
         if (_options.max == 0 || _options.min == 0 || _options.min > _options.max) revert InvalidInitialization();
-        if (_options.liquidityBps < 5100 || _options.liquidityBps > BASIS_POINTS) revert InvalidInitialization();
+        if (_options.liquidityBps < 5000 || !isAllowedLiquidityBps(_options.liquidityBps)) revert InvalidLiquidityBps();
         if (_options.slippageBps > 500) revert InvalidInitialization();
         if (_options.presaleRate == 0 || _options.listingRate == 0 || _options.listingRate >= _options.presaleRate) {
             revert InvalidInitialization();
         }
         if (_options.start < block.timestamp || _options.end <= _options.start) revert InvalidInitialization();
         if (_options.lockupDuration == 0) revert InvalidInitialization();
+        if (_options.vestingPercentage > BASIS_POINTS) revert InvalidVestingPercentage();
+        if (_options.vestingPercentage > 0 && _options.vestingDuration == 0) revert InvalidVestingDuration();
+        if (_options.leftoverTokenOption > 2) revert InvalidLeftoverTokenOption();
+    }
+
+    function isAllowedLiquidityBps(uint256 _bps) private pure returns (bool) {
+        for (uint256 i = 0; i < ALLOWED_LIQUIDITY_BPS.length; i++) {
+            if (_bps == ALLOWED_LIQUIDITY_BPS[i]) return true;
+        }
+        return false;
     }
 
     function userTokens(address _contributor) public view returns (uint256) {

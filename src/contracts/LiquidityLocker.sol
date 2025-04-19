@@ -19,7 +19,7 @@ contract LiquidityLocker is Ownable {
 
     event LiquidityLocked(address indexed token, uint256 amount, uint256 unlockTime, address indexed owner);
     event LiquidityWithdrawn(address indexed token, uint256 amount, address indexed owner);
-                                                                                                                                    
+
     error InvalidTokenAddress();
     error ZeroAmount();
     error InvalidUnlockTime();
@@ -45,7 +45,7 @@ contract LiquidityLocker is Ownable {
 
     function withdraw(uint256 _lockId) external {
         if (_lockId >= locks.length) revert InvalidLockId();
-        Lock storage lockData = locks[_lockId]; 
+        Lock storage lockData = locks[_lockId];
         if (msg.sender != lockData.owner) revert NotLockOwner();
         if (block.timestamp < lockData.unlockTime) revert TokensStillLocked();
         if (lockData.amount == 0) revert NoTokensToWithdraw();
@@ -60,7 +60,7 @@ contract LiquidityLocker is Ownable {
 
     function getLock(uint256 _lockId) external view returns (address, uint256, uint256, address) {
         if (_lockId >= locks.length) revert InvalidLockId();
-        Lock memory lockInfo = locks[_lockId]; 
+        Lock memory lockInfo = locks[_lockId];
         return (lockInfo.token, lockInfo.amount, lockInfo.unlockTime, lockInfo.owner);
     }
 
