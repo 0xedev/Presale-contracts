@@ -77,16 +77,23 @@ contract LiquidityLockerInteractionTest is Test {
         presaleRate: 1000,
         listingRate: 500,
         lockupDuration: 365 days,
-        currency: address(0)
+        currency: address(0),
+        vestingPercentage: 0, // Add missing fields
+        vestingDuration: 0, // Add missing fields
+        leftoverTokenOption: 0 // Add missing fields
     });
     address weth;
 
     function setUp() public {
-        factory = new PresaleFactory(creationFee, address(0));
         uniswapPair = new MockUniswapV2Pair();
         uniswapFactory = new MockUniswapV2Factory(address(uniswapPair));
         uniswapRouter = new MockUniswapV2Router(address(uniswapFactory));
-        weth = address(0x2);
+        weth = address(0x2); // Initialize WETH address
+
+        // Initialize the router variable
+        address router = address(uniswapRouter);
+
+        factory = new PresaleFactory(creationFee, address(0), router, weth, address(this));
 
         // Transfer some LP tokens to the router to simulate a liquidity pool
         uniswapPair.transfer(address(uniswapRouter), 1000 ether); // Enough for multiple tests

@@ -22,14 +22,17 @@ contract PresaleOptionsTest is Test {
         presaleRate: 1000,
         listingRate: 500,
         lockupDuration: 365 days,
-        currency: address(0)
+        currency: address(0),
+        vestingPercentage: 0, // Add missing fields
+        vestingDuration: 0, // Add missing fields
+        leftoverTokenOption: 0 // Add missing fields
     });
     address token = address(0x1);
     address weth = address(0x2);
     address router = address(0x3);
 
     function setUp() public {
-        factory = new PresaleFactory(creationFee, address(0));
+        factory = new PresaleFactory(creationFee, address(0), address(router), address(weth), address(this));
     }
 
     receive() external payable {}

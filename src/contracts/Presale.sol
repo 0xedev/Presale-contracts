@@ -6,8 +6,8 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IUniswapV2Router02} from "v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import {IUniswapV2Factory} from "v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import {IUniswapV2Router02} from "lib/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import {IUniswapV2Factory} from "lib/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import {IPresale} from "./interfaces/IPresale.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {LiquidityLocker} from "./LiquidityLocker.sol";
@@ -66,7 +66,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     address[] public contributors;
     Pool public pool;
 
-    uint256[] private constant ALLOWED_LIQUIDITY_BPS = [5000, 6000, 7000, 8000, 9000, 10000];
+    uint256[] private ALLOWED_LIQUIDITY_BPS = [5000, 6000, 7000, 8000, 9000, 10000];
 
     error ContractPaused();
     error ETHNotAccepted();
@@ -88,14 +88,12 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     error NotPaused();
     error ZeroTokensForContribution();
     error InvalidInitialization();
-    error InvalidVestingPercentage();
     error InvalidVestingDuration();
     error InvalidLeftoverTokenOption();
     error InvalidLiquidityBps();
-    error InvalidVestingPercentage();
-    error InvalidVestingDuration();
     error InvalidHousePercentage();
     error InvalidHouseAddress();
+    error InvalidVestingPercentage();
 
     event Paused(address indexed account);
     event Unpaused(address indexed account);

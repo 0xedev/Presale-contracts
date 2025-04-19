@@ -37,15 +37,19 @@ contract PresaleFactoryTest is Test, PresaleFactoryEvents {
         presaleRate: 1000,
         listingRate: 500,
         lockupDuration: 365 days,
-        currency: address(0)
+        currency: address(0),
+        vestingPercentage: 0, // Add missing fields
+        vestingDuration: 0, // Add missing fields
+        leftoverTokenOption: 0 // Add missing fields
     });
+
     address token = address(0x1);
     address weth = address(0x2);
     address router = address(0x3);
 
     function setUp() public {
         feeToken = new MockERC20();
-        factory = new PresaleFactory(creationFee, address(0));
+        factory = new PresaleFactory(creationFee, address(0), address(router), address(weth), address(this));
     }
 
     receive() external payable {}
@@ -87,7 +91,7 @@ contract PresaleFactoryTest is Test, PresaleFactoryEvents {
     }
 
     function test_CreatePresaleWithValidParameters_ERC20() public {
-        factory = new PresaleFactory(creationFee, address(feeToken));
+        factory = new PresaleFactory(creationFee, address(0), address(router), address(weth), address(this));
         feeToken.approve(address(factory), creationFee);
 
         address expectedPresale = vm.computeCreateAddress(address(factory), factory.getPresaleCount() + 2);
@@ -121,7 +125,7 @@ contract PresaleFactoryTest is Test, PresaleFactoryEvents {
     }
 
     function test_InsufficientERC20Fee() public {
-        factory = new PresaleFactory(creationFee, address(feeToken));
+        factory = new PresaleFactory(creationFee, address(0), address(router), address(weth), address(this));
         feeToken.approve(address(factory), creationFee - 1);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -150,7 +154,7 @@ contract PresaleFactoryTest is Test, PresaleFactoryEvents {
     }
 
     function test_OwnerCanWithdrawERC20Fees() public {
-        factory = new PresaleFactory(creationFee, address(feeToken));
+        factory = new PresaleFactory(creationFee, address(0), address(router), address(weth), address(this));
         feeToken.approve(address(factory), creationFee);
         factory.createPresale(options, token, weth, router);
         uint256 initialBalance = feeToken.balanceOf(owner);
@@ -192,7 +196,7 @@ contract PresaleFactoryTest is Test, PresaleFactoryEvents {
 
     function test_CreatePresaleWithFeeTokenAsWeth() public {
         MockERC20 wethToken = new MockERC20();
-        factory = new PresaleFactory(creationFee, address(wethToken));
+        factory = new PresaleFactory(creationFee, address(0), address(router), address(weth), address(this));
         wethToken.approve(address(factory), creationFee);
 
         address presale = factory.createPresale(options, token, address(wethToken), router);
@@ -212,7 +216,7 @@ contract PresaleFactoryTest is Test, PresaleFactoryEvents {
     }
 
     function test_FactoryERC20BalanceAfterPresaleCreation() public {
-        factory = new PresaleFactory(creationFee, address(feeToken));
+        factory = new PresaleFactory(creationFee, address(0), address(router), address(weth), address(this));
         feeToken.approve(address(factory), creationFee);
         uint256 initialFactoryBalance = feeToken.balanceOf(address(factory));
         factory.createPresale(options, token, weth, router);
