@@ -57,7 +57,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
 
     PresaleState public state;
 
-    //remove Track totalClaimed and totalRefunded
+
     struct Pool {
         ERC20 token;
         IUniswapV2Router02 uniswapV2Router02;
@@ -70,7 +70,9 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         uint8 state;
         PresaleOptions options;
     }
-
+    mapping (address => uint256) public totalClaimed;
+    mapping (address => uint256) public totalRefunded;
+    mapping (address => uint256) public totalContributed;
     mapping(address => uint256) public contributions;
     mapping(address => bool) public whitelist;
     address[] public contributors;
@@ -283,9 +285,9 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
             }
             emit HouseFundsDistributed(houseAddress, houseAmount);
         }
-        //remove
+    
         ownerBalance = pool.weiRaised - liquidityAmount - houseAmount;
-        claimDeadline = block.timestamp + 90 days;
+        claimDeadline = block.timestamp + 180 days;
 
         // Handle leftover tokens
         _handleLeftoverTokens();
@@ -371,7 +373,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         }
         emit Withdrawn(msg.sender, amount);
     }
-    //removed
+   
 
     function rescueTokens(address _token, address _to, uint256 _amount) external onlyOwner {
         if (_to == address(0)) revert InvalidAddress();
@@ -382,8 +384,10 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     //remove  The owner can toggle and update the whitelist at any time, potentially excluding legitimate contributors. Fix: Lock whitelist changes after the presale starts or emit events for transparency.
 
     function toggleWhitelist(bool _enabled) external onlyOwner {
-        whitelistEnabled = _enabled;
-        emit WhitelistToggled(_enabled);
+    if (state != PresaleState.Pending) revert InvalidState(uint8(state));
+    whitelistEnabled = _enabled;
+    emit WhitelistToggled(_enabled);
+
     }
     //remove . Consider batch processing or a merkle tree for scalability
 

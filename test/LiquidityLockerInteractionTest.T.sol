@@ -93,7 +93,7 @@ contract LiquidityLockerInteractionTest is Test {
         // Initialize the router variable
         address router = address(uniswapRouter);
 
-        factory = new PresaleFactory(creationFee, address(0), router, weth, address(this));
+        factory = new PresaleFactory(creationFee, router, weth, 0, address(this));
 
         // Transfer some LP tokens to the router to simulate a liquidity pool
         uniswapPair.transfer(address(uniswapRouter), 1000 ether); // Enough for multiple tests
