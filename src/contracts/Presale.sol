@@ -221,7 +221,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         IERC20(pool.options.currency).safeTransferFrom(msg.sender, address(this), _amount);
         if (_amount == 0) revert ZeroTokensForContribution();
         _purchase(msg.sender, _amount);
-        _trackContribution(msg.sender, msg.value, false);
+        _trackContribution(msg.sender, _amount, false);
     }
 
     function deposit() external onlyOwner whenNotPaused returns (uint256) {
@@ -257,7 +257,9 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
             // Vest for the owner
             pool.token.approve(address(vestingContract), unsoldTokens);
             // In Presale.sol
-vestingContract.createVesting(msg.sender, vestedTokens, block.timestamp, pool.options.vestingDuration, uint256(uint160(address(this))));
+            vestingContract.createVesting(
+                msg.sender, unsoldTokens, block.timestamp, pool.options.vestingDuration, uint256(uint160(address(this)))
+            );
             emit LeftoverTokensVested(unsoldTokens, owner());
         }
     }
@@ -328,7 +330,9 @@ vestingContract.createVesting(msg.sender, vestedTokens, block.timestamp, pool.op
         // Set up vesting for vested tokens
         if (vestedTokens > 0) {
             pool.token.approve(address(vestingContract), vestedTokens);
-            vestingContract.createVesting(msg.sender, vestedTokens, block.timestamp, pool.options.vestingDuration);
+             vestingContract.createVesting(
+                msg.sender, vestedTokens, block.timestamp, pool.options.vestingDuration, uint256(uint160(address(this)))
+            );
         }
 
         emit TokenClaim(msg.sender, totalTokens, block.timestamp);
@@ -492,7 +496,7 @@ vestingContract.createVesting(msg.sender, vestedTokens, block.timestamp, pool.op
         if (_options.leftoverTokenOption > 2) revert InvalidLeftoverTokenOption();
     }
 
-    function isAllowedLiquidityBps(uint256 _bps) private pure returns (bool) {
+    function isAllowedLiquidityBps(uint256 _bps) private view returns (bool) {
         for (uint256 i = 0; i < ALLOWED_LIQUIDITY_BPS.length; i++) {
             if (_bps == ALLOWED_LIQUIDITY_BPS[i]) return true;
         }

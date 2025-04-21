@@ -22,7 +22,9 @@ contract Vesting is Ownable, ReentrancyGuard {
     mapping(address => mapping(uint256 => VestingSchedule)) public schedules; // beneficiary => scheduleId => VestingSchedule
     mapping(address => uint256) public scheduleCount; // Tracks number of schedules per beneficiary
 
-    event VestingCreated(address indexed beneficiary, uint256 amount, uint256 start, uint256 duration, uint256 scheduleId);
+    event VestingCreated(
+        address indexed beneficiary, uint256 amount, uint256 start, uint256 duration, uint256 scheduleId
+    );
     event TokensReleased(address indexed beneficiary, uint256 amount, uint256 scheduleId);
     event Paused(address indexed owner);
     event Unpaused(address indexed owner);
@@ -54,12 +56,8 @@ contract Vesting is Ownable, ReentrancyGuard {
         if (_duration == 0) revert InvalidDuration();
         if (schedules[_beneficiary][_scheduleId].totalAmount != 0) revert ScheduleExists();
 
-        schedules[_beneficiary][_scheduleId] = VestingSchedule({
-            totalAmount: _amount,
-            released: 0,
-            start: _start,
-            duration: _duration
-        });
+        schedules[_beneficiary][_scheduleId] =
+            VestingSchedule({totalAmount: _amount, released: 0, start: _start, duration: _duration});
         scheduleCount[_beneficiary]++;
         token.safeTransferFrom(msg.sender, address(this), _amount);
         emit VestingCreated(_beneficiary, _amount, _start, _duration, _scheduleId);
