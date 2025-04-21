@@ -1,1 +1,0 @@
-lets use a custom \_burn instead and also i think presale.sol is too crowded, we can move some parts away from it. less i forget i implemented house% to cap at 500bps, dont worry about the implementation i did it already

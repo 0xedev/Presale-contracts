@@ -136,51 +136,209 @@ interface IPresale {
      */
     event Cancel(address indexed owner, uint256 timestamp);
 
+ event Paused(address indexed account);
+    event Unpaused(address indexed account);
+    event TokensRescued(address indexed token, address indexed to, uint256 amount);
+    event Withdrawn(address indexed owner, uint256 amount);
+    event WhitelistToggled(bool enabled);
+    event WhitelistUpdated(address indexed contributor, bool added);
+    event Contribution(address indexed contributor, uint256 amount, bool isETH);
+    event LeftoverTokensReturned(uint256 amount, address indexed beneficiary);
+    event LeftoverTokensBurned(uint256 amount);
+    event LeftoverTokensVested(uint256 amount, address indexed beneficiary);
+    event HouseFundsDistributed(address indexed house, uint256 amount);
+
+/// @notice Thrown when the contract is paused and an action cannot be performed.
+error ContractPaused();
+
+/// @notice Thrown when ETH is not accepted for the current operation.
+error ETHNotAccepted();
+
+/// @notice Thrown when stablecoins are not accepted for the current operation.
+error StablecoinNotAccepted();
+
+/// @notice Thrown when the presale is not active.
+error NotActive();
+
+/// @notice Thrown when the claim period has expired.
+error ClaimPeriodExpired();
+
+/// @notice Thrown when there are no tokens available to claim.
+error NoTokensToClaim();
+
+/// @notice Thrown when the token balance is insufficient for the operation.
+error InsufficientTokenBalance();
+
+/// @notice Thrown when there are no funds available to refund.
+error NoFundsToRefund();
+
+/// @notice Thrown when the contract balance is insufficient for the operation.
+error InsufficientContractBalance();
+
+/// @notice Thrown when the contributor address is invalid.
+error InvalidContributorAddress();
+
+/// @notice Thrown when the hard cap for the presale is exceeded.
+error HardCapExceeded();
+
+/// @notice Thrown when the contribution is below the minimum allowed amount.
+error BelowMinimumContribution();
+
+/// @notice Thrown when the contribution exceeds the maximum allowed amount.
+error ExceedsMaximumContribution();
+
+/// @notice Thrown when the contributor is not whitelisted.
+error NotWhitelisted();
+
+/// @notice Thrown when an invalid address is provided.
+error InvalidAddress();
+
+/// @notice Thrown when attempting to rescue presale tokens, which is not allowed.
+error CannotRescuePresaleTokens();
+
+/// @notice Thrown when the contract is already paused.
+error AlreadyPaused();
+
+/// @notice Thrown when the contract is not paused but an action requires it to be paused.
+error NotPaused();
+
+/// @notice Thrown when the contribution results in zero tokens being allocated.
+error ZeroTokensForContribution();
+
+/// @notice Thrown when the initialization parameters are invalid.
+error InvalidInitialization();
+
+/// @notice Thrown when the vesting duration is invalid.
+error InvalidVestingDuration();
+
+/// @notice Thrown when the leftover token option is invalid.
+error InvalidLeftoverTokenOption();
+
+/// @notice Thrown when the liquidity basis points (bps) are invalid.
+error InvalidLiquidityBps();
+
+/// @notice Thrown when the house percentage is invalid.
+error InvalidHousePercentage();
+
+/// @notice Thrown when the house address is invalid.
+error InvalidHouseAddress();
+
+/// @notice Thrown when the vesting percentage is invalid.
+error InvalidVestingPercentage();
+ 
     /**
-     * @dev Allows for the deposit of presale tokens by the owner.
-     * This function is intended to be called by the presale contract owner to
-     * deposit the tokens that are to be sold during the presale.
-     *
-     * @return The amount of tokens deposited for the presale.
+     * @notice Allows a user to contribute to the presale using native currency.
+     * @dev This function is payable and accepts native currency contributions.
+     */
+    function contribute() external payable;
+
+    /**
+     * @notice Allows a user to contribute to the presale using stablecoins.
+     * @param amount The amount of stablecoins to contribute.
+     */
+    function contributeStablecoin(uint256 amount) external;
+
+    /**
+     * @notice Deposits funds into the presale contract.
+     * @return The amount of funds deposited.
      */
     function deposit() external returns (uint256);
 
     /**
-     * @dev Finalizes the presale, allowing for the distribution of tokens to
-     * participants and the withdrawal of funds raised to the beneficiary. This
-     * function is typically called after the presale ends, assuming it meets
-     * any predefined criteria such as minimum funding goals.
-     *
-     * @return A boolean value indicating whether the presale was successfully
-     * finalized.
+     * @notice Finalizes the presale, locking in contributions and enabling token distribution.
+     * @return A boolean indicating whether the presale was successfully finalized.
      */
     function finalize() external returns (bool);
 
     /**
-     * @dev Cancels the presale and enables the refund process for participants.
-     * This function can be used in scenarios where the presale does not meet
-     * its goals or if the organizer decides to cancel the event for any reason.
-     *
-     * @return A boolean value indicating whether the presale was successfully
-     * cancelled.
+     * @notice Cancels the presale and enables refunds for contributors.
+     * @return A boolean indicating whether the presale was successfully canceled.
      */
     function cancel() external returns (bool);
 
     /**
-     * @dev Allows participants to claim their purchased tokens after the presale
-     * is finalized. Participants call this function to receive the tokens they
-     * are entitled to.
-     *
-     * @return The amount of tokens claimed by the caller.
+     * @notice Allows a user to claim their allocated tokens after the presale is finalized.
+     * @return The amount of tokens claimed by the user.
      */
     function claim() external returns (uint256);
 
     /**
-     * @dev Enables participants to request a refund of their contribution if the
-     * presale is cancelled or if they are otherwise eligible for a refund
-     * according to the presale's terms.
-     *
-     * @return The amount of funds refunded to the caller.
+     * @notice Allows a user to request a refund of their contribution if the presale is canceled.
+     * @return The amount refunded to the user.
      */
     function refund() external returns (uint256);
+
+    /**
+     * @notice Withdraws funds from the presale contract to the owner's address.
+     */
+    function withdraw() external;
+
+    /**
+     * @notice Rescues tokens mistakenly sent to the contract.
+     * @param token The address of the token to rescue.
+     * @param to The address to send the rescued tokens to.
+     * @param amount The amount of tokens to rescue.
+     */
+    function rescueTokens(address token, address to, uint256 amount) external;
+
+    /**
+     * @notice Toggles the whitelist functionality for the presale.
+     * @param enabled A boolean indicating whether the whitelist should be enabled or disabled.
+     */
+    function toggleWhitelist(bool enabled) external;
+
+    /**
+     * @notice Updates the whitelist by adding or removing addresses.
+     * @param addresses The list of addresses to update in the whitelist.
+     * @param add A boolean indicating whether to add (true) or remove (false) the addresses.
+     */
+    function updateWhitelist(address[] calldata addresses, bool add) external;
+
+    /**
+     * @notice Pauses the presale, preventing contributions and other actions.
+     */
+    function pause() external;
+
+    /**
+     * @notice Unpauses the presale, allowing contributions and other actions to resume.
+     */
+    function unpause() external;
+
+    /**
+     * @notice Calculates the total number of tokens needed for the presale.
+     * @return The total number of tokens required.
+     */
+    function calculateTotalTokensNeeded() external view returns (uint256);
+
+    /**
+     * @notice Retrieves the number of tokens allocated to a specific contributor.
+     * @param contributor The address of the contributor.
+     * @return The number of tokens allocated to the contributor.
+     */
+    function userTokens(address contributor) external view returns (uint256);
+
+    /**
+     * @notice Retrieves the total number of contributors to the presale.
+     * @return The total number of contributors.
+     */
+    function getContributorCount() external view returns (uint256);
+
+    /**
+     * @notice Retrieves the list of all contributors to the presale.
+     * @return An array of addresses representing the contributors.
+     */
+    function getContributors() external view returns (address[] memory);
+
+    /**
+     * @notice Retrieves the total amount of contributions made to the presale.
+     * @return The total amount of contributions.
+     */
+    function getTotalContributed() external view returns (uint256);
+
+    /**
+     * @notice Retrieves the contribution amount of a specific contributor.
+     * @param contributor The address of the contributor.
+     * @return The amount contributed by the specified contributor.
+     */
+    function getContribution(address contributor) external view returns (uint256);
 }

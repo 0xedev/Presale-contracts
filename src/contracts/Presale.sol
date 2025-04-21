@@ -80,44 +80,6 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
 
     uint256[] private ALLOWED_LIQUIDITY_BPS = [5000, 6000, 7000, 8000, 9000, 10000];
 
-    error ContractPaused();
-    error ETHNotAccepted();
-    error StablecoinNotAccepted();
-    error NotActive();
-    error ClaimPeriodExpired();
-    error NoTokensToClaim();
-    error InsufficientTokenBalance();
-    error NoFundsToRefund();
-    error InsufficientContractBalance();
-    error InvalidContributorAddress();
-    error HardCapExceeded();
-    error BelowMinimumContribution();
-    error ExceedsMaximumContribution();
-    error NotWhitelisted();
-    error InvalidAddress();
-    error CannotRescuePresaleTokens();
-    error AlreadyPaused();
-    error NotPaused();
-    error ZeroTokensForContribution();
-    error InvalidInitialization();
-    error InvalidVestingDuration();
-    error InvalidLeftoverTokenOption();
-    error InvalidLiquidityBps();
-    error InvalidHousePercentage();
-    error InvalidHouseAddress();
-    error InvalidVestingPercentage();
-
-    event Paused(address indexed account);
-    event Unpaused(address indexed account);
-    event TokensRescued(address indexed token, address indexed to, uint256 amount);
-    event Withdrawn(address indexed owner, uint256 amount);
-    event WhitelistToggled(bool enabled);
-    event WhitelistUpdated(address indexed contributor, bool added);
-    event Contribution(address indexed contributor, uint256 amount, bool isETH);
-    event LeftoverTokensReturned(uint256 amount, address indexed beneficiary);
-    event LeftoverTokensBurned(uint256 amount);
-    event LeftoverTokensVested(uint256 amount, address indexed beneficiary);
-    event HouseFundsDistributed(address indexed house, uint256 amount);
 
     modifier whenNotPaused() {
         if (paused) revert ContractPaused();
