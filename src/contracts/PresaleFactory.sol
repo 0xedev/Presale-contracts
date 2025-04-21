@@ -9,6 +9,8 @@ import {Presale} from "./Presale.sol";
 import {LiquidityLocker} from "./LiquidityLocker.sol";
 import {Vesting} from "./Vesting.sol";
 
+//remove Add a pause function to halt presale creation.
+
 contract PresaleFactory is Ownable {
     LiquidityLocker public liquidityLocker;
     Vesting public vestingContract;
@@ -78,6 +80,7 @@ contract PresaleFactory is Ownable {
 
         return address(presale);
     }
+    //remove setHousePercentage, pause
 
     function setHousePercentage(uint256 _percentage) external onlyOwner {
         if (_percentage > 500) revert InvalidHousePercentage();

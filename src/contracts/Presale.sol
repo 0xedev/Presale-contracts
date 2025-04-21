@@ -48,6 +48,16 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         uint8 leftoverTokenOption; // 0 = return, 1 = burn, 2 = vest
     }
 
+    enum PresaleState {
+        Pending,
+        Active,
+        Canceled,
+        Finalized
+    }
+
+    PresaleState public state;
+
+    //remove Track totalClaimed and totalRefunded
     struct Pool {
         ERC20 token;
         IUniswapV2Router02 uniswapV2Router02;
@@ -137,7 +147,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
             revert InvalidInitialization();
         }
         if (_options.leftoverTokenOption > 2) revert InvalidLeftoverTokenOption();
-        if (_housePercentage > 5000) revert InvalidHousePercentage();
+        if (_housePercentage > 500) revert InvalidHousePercentage();
         if (_houseAddress == address(0) && _housePercentage > 0) revert InvalidHouseAddress();
         _prevalidatePool(_options);
 
@@ -159,7 +169,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         });
     }
 
-    function contribute() external payable whenNotPaused {
+    function contribute() external payable whenNotPaused nonReentrant {
         if (pool.options.currency != address(0)) revert ETHNotAccepted();
         if (pool.state != 2) revert NotActive();
         uint256 tokenAmount =
@@ -169,7 +179,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         _trackContribution(msg.sender, msg.value, true);
     }
 
-    receive() external payable whenNotPaused {
+    receive() external payable whenNotPaused nonReentrant {
         if (pool.options.currency != address(0)) revert ETHNotAccepted();
         if (pool.state != 2) revert NotActive();
         uint256 tokenAmount =
@@ -205,11 +215,13 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         return contributions[_contributor];
     }
 
-    function contributeStablecoin(uint256 _amount) external whenNotPaused {
+    function contributeStablecoin(uint256 _amount) external whenNotPaused nonReentrant {
         if (pool.options.currency == address(0)) revert StablecoinNotAccepted();
         if (pool.state != 2) revert NotActive();
         IERC20(pool.options.currency).safeTransferFrom(msg.sender, address(this), _amount);
+        if (_amount == 0) revert ZeroTokensForContribution();
         _purchase(msg.sender, _amount);
+        _trackContribution(msg.sender, msg.value, false);
     }
 
     function deposit() external onlyOwner whenNotPaused returns (uint256) {
@@ -244,12 +256,13 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         } else {
             // Vest for the owner
             pool.token.approve(address(vestingContract), unsoldTokens);
-            vestingContract.createVesting(owner(), unsoldTokens, block.timestamp, pool.options.vestingDuration);
+            // In Presale.sol
+vestingContract.createVesting(msg.sender, vestedTokens, block.timestamp, pool.options.vestingDuration, uint256(uint160(address(this))));
             emit LeftoverTokensVested(unsoldTokens, owner());
         }
     }
 
-    function finalize() external onlyOwner whenNotPaused returns (bool) {
+    function finalize() external onlyOwner whenNotPaused nonReentrant returns (bool) {
         if (pool.state != 2) revert InvalidState(pool.state);
         if (pool.weiRaised < pool.options.softCap) revert SoftCapNotReached();
 
@@ -268,7 +281,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
             }
             emit HouseFundsDistributed(houseAddress, houseAmount);
         }
-
+        //remove
         ownerBalance = pool.weiRaised - liquidityAmount - houseAmount;
         claimDeadline = block.timestamp + 90 days;
 
@@ -354,6 +367,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         }
         emit Withdrawn(msg.sender, amount);
     }
+    //removed
 
     function rescueTokens(address _token, address _to, uint256 _amount) external onlyOwner {
         if (_to == address(0)) revert InvalidAddress();
@@ -361,11 +375,13 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         IERC20(_token).safeTransfer(_to, _amount);
         emit TokensRescued(_token, _to, _amount);
     }
+    //remove  The owner can toggle and update the whitelist at any time, potentially excluding legitimate contributors. Fix: Lock whitelist changes after the presale starts or emit events for transparency.
 
     function toggleWhitelist(bool _enabled) external onlyOwner {
         whitelistEnabled = _enabled;
         emit WhitelistToggled(_enabled);
     }
+    //remove . Consider batch processing or a merkle tree for scalability
 
     function updateWhitelist(address[] calldata _addresses, bool _add) external onlyOwner {
         for (uint256 i = 0; i < _addresses.length; i++) {

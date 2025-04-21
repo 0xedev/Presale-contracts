@@ -38,34 +38,34 @@ contract PresaleVestingTest is Test {
     });
 
     function setUp() public {
-    // Initialize the token
-    token = new TestToken(12000 ether);
+        // Initialize the token
+        token = new TestToken(12000 ether);
 
-    // Mock Uniswap components
-    MockUniswapV2Pair uniswapPair = new MockUniswapV2Pair();
-    MockUniswapV2Factory uniswapFactory = new MockUniswapV2Factory(address(uniswapPair));
-    MockUniswapV2Router uniswapRouter = new MockUniswapV2Router(address(uniswapFactory));
+        // Mock Uniswap components
+        MockUniswapV2Pair uniswapPair = new MockUniswapV2Pair();
+        MockUniswapV2Factory uniswapFactory = new MockUniswapV2Factory(address(uniswapPair));
+        MockUniswapV2Router uniswapRouter = new MockUniswapV2Router(address(uniswapFactory));
 
-    // Initialize WETH and router
-    address weth = address(0x2); // Mock WETH address
-    address router = address(uniswapRouter);
+        // Initialize WETH and router
+        address weth = address(0x2); // Mock WETH address
+        address router = address(uniswapRouter);
 
-    // Initialize the factory
-    factory = new PresaleFactory(creationFee, address(0), router, weth, address(this));
+        // Initialize the factory
+        factory = new PresaleFactory(creationFee, address(0), router, weth, address(this));
 
-    // Deal ETH to the creator
-    vm.deal(creator, 1 ether);
+        // Deal ETH to the creator
+        vm.deal(creator, 1 ether);
 
-    // Create a presale
-    vm.startPrank(creator);
-    presale = Presale(
-        payable(factory.createPresale{value: creationFee}(options, address(token), address(0x3), address(0x4)))
-    );
-    vm.stopPrank();
+        // Create a presale
+        vm.startPrank(creator);
+        presale = Presale(
+            payable(factory.createPresale{value: creationFee}(options, address(token), address(0x3), address(0x4)))
+        );
+        vm.stopPrank();
 
-    // Initialize the vesting contract
-    vesting = factory.vestingContract();
-}
+        // Initialize the vesting contract
+        vesting = factory.vestingContract();
+    }
 
     function test_HousePercentageDistribution() public {
         vm.startPrank(creator);
@@ -94,12 +94,16 @@ contract PresaleVestingTest is Test {
         assertEq(factory.housePercentage(), 2000, "House percentage not updated");
 
         vm.prank(creator);
-        Presale newPresale = Presale(payable(factory.createPresale{value: creationFee}(
-            options,
-            address(token),
-            address(0x3), // Replace with actual liquidity locker address
-            address(0x4)  // Replace with actual vesting contract address
-        )));
+        Presale newPresale = Presale(
+            payable(
+                factory.createPresale{value: creationFee}(
+                    options,
+                    address(token),
+                    address(0x3), // Replace with actual liquidity locker address
+                    address(0x4) // Replace with actual vesting contract address
+                )
+            )
+        );
 
         vm.startPrank(creator);
         token.approve(address(newPresale), options.tokenDeposit);
