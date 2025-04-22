@@ -149,7 +149,8 @@ interface IPresale {
     event HouseFundsDistributed(address indexed house, uint256 amount);
     event MerkleRootUpdated(bytes32 indexed _merkleRoot);
     event ClaimDeadlineExtended(uint256 newDeadline);
-error InvalidLiquidityAmounts();
+
+    error InvalidLiquidityAmounts();
     error BatchTooLarge();
     error InvalidDeadline();
     error CannotRescueBeforeFinalization();
@@ -230,8 +231,6 @@ error InvalidLiquidityAmounts();
 
     /// @notice Thrown when the vesting percentage is invalid.
     error InvalidVestingPercentage();
-
-  
 
     /**
      * @notice Deposits funds into the presale contract.

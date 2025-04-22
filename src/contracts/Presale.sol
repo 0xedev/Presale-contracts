@@ -18,6 +18,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using SafeERC20 for ERC20;
     using Address for address payable;
+
     uint256 public totalRefundable;
     uint256 public constant BASIS_POINTS = 10_000;
     bool public paused;
@@ -80,14 +81,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     address[] public contributors;
     Pool public pool;
 
-    uint256[] private ALLOWED_LIQUIDITY_BPS = [
-        5000,
-        6000,
-        7000,
-        8000,
-        9000,
-        10000
-    ];
+    uint256[] private ALLOWED_LIQUIDITY_BPS = [5000, 6000, 7000, 8000, 9000, 10000];
 
     modifier whenNotPaused() {
         if (paused) revert ContractPaused();
@@ -95,11 +89,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     }
 
     modifier onlyRefundable() {
-        if (
-            !(pool.state == 3 ||
-                (block.timestamp > pool.options.end &&
-                    pool.weiRaised < pool.options.softCap))
-        ) {
+        if (!(pool.state == 3 || (block.timestamp > pool.options.end && pool.weiRaised < pool.options.softCap))) {
             revert NotRefundable();
         }
         _;
@@ -117,11 +107,8 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         address _houseAddress
     ) Ownable(_creator) {
         if (
-            _weth == address(0) ||
-            _token == address(0) ||
-            _uniswapV2Router02 == address(0) ||
-            _liquidityLocker == address(0) ||
-            _vestingContract == address(0)
+            _weth == address(0) || _token == address(0) || _uniswapV2Router02 == address(0)
+                || _liquidityLocker == address(0) || _vestingContract == address(0)
         ) {
             revert InvalidInitialization();
         }
@@ -158,25 +145,15 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         emit MerkleRootUpdated(_merkleRoot);
     }
 
-    function contribute(
-        bytes32[] calldata _merkleProof
-    ) external payable whenNotPaused nonReentrant {
-        if (
-            whitelistEnabled &&
-            !MerkleProof.verify(
-                _merkleProof,
-                merkleRoot,
-                keccak256(abi.encodePacked(msg.sender))
-            )
-        ) {
+    function contribute(bytes32[] calldata _merkleProof) external payable whenNotPaused nonReentrant {
+        if (whitelistEnabled && !MerkleProof.verify(_merkleProof, merkleRoot, keccak256(abi.encodePacked(msg.sender))))
+        {
             revert NotWhitelisted();
         }
         if (pool.options.currency != address(0)) revert ETHNotAccepted();
         if (pool.state != 2) revert NotActive();
-        uint256 tokenAmount = userTokens(msg.sender) +
-            ((msg.value *
-                pool.options.presaleRate *
-                10 ** pool.token.decimals()) / 10 ** 18);
+        uint256 tokenAmount =
+            userTokens(msg.sender) + ((msg.value * pool.options.presaleRate * 10 ** pool.token.decimals()) / 10 ** 18);
         if (tokenAmount == 0) revert ZeroTokensForContribution();
         _purchase(msg.sender, msg.value);
         _trackContribution(msg.sender, msg.value, true);
@@ -185,21 +162,15 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     receive() external payable whenNotPaused nonReentrant {
         if (pool.options.currency != address(0)) revert ETHNotAccepted();
         if (pool.state != 2) revert NotActive();
-        uint256 tokenAmount = userTokens(msg.sender) +
-            ((msg.value *
-                pool.options.presaleRate *
-                10 ** pool.token.decimals()) / 10 ** 18);
+        uint256 tokenAmount =
+            userTokens(msg.sender) + ((msg.value * pool.options.presaleRate * 10 ** pool.token.decimals()) / 10 ** 18);
         if (tokenAmount == 0) revert ZeroTokensForContribution();
         _purchase(msg.sender, msg.value);
         _trackContribution(msg.sender, msg.value, true);
     }
 
     // New tracking function
-    function _trackContribution(
-        address _contributor,
-        uint256 _amount,
-        bool _isETH
-    ) private {
+    function _trackContribution(address _contributor, uint256 _amount, bool _isETH) private {
         if (contributions[_contributor] == 0) {
             contributors.push(_contributor); // Add new contributor
         }
@@ -220,33 +191,22 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         return pool.weiRaised; // Already tracked in pool.weiRaised
     }
 
-    function getContribution(
-        address _contributor
-    ) external view returns (uint256) {
+    function getContribution(address _contributor) external view returns (uint256) {
         return contributions[_contributor];
     }
 
-    function contributeStablecoin(
-        uint256 _amount,
-        bytes32[] calldata _merkleProof
-    ) external whenNotPaused nonReentrant {
-        if (
-            whitelistEnabled &&
-            !MerkleProof.verify(
-                _merkleProof,
-                merkleRoot,
-                keccak256(abi.encodePacked(msg.sender))
-            )
-        ) {
+    function contributeStablecoin(uint256 _amount, bytes32[] calldata _merkleProof)
+        external
+        whenNotPaused
+        nonReentrant
+    {
+        if (whitelistEnabled && !MerkleProof.verify(_merkleProof, merkleRoot, keccak256(abi.encodePacked(msg.sender))))
+        {
             revert NotWhitelisted();
         }
         if (pool.options.currency == address(0)) revert StablecoinNotAccepted();
         if (pool.state != 2) revert NotActive();
-        IERC20(pool.options.currency).safeTransferFrom(
-            msg.sender,
-            address(this),
-            _amount
-        );
+        IERC20(pool.options.currency).safeTransferFrom(msg.sender, address(this), _amount);
         if (_amount == 0) revert ZeroTokensForContribution();
         _purchase(msg.sender, _amount); // Update _purchase to remove whitelist mapping check
         _trackContribution(msg.sender, _amount, false);
@@ -269,8 +229,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         if (pool.tokenBalance < pool.tokensClaimable + pool.tokensLiquidity) {
             revert InsufficientTokenBalance();
         }
-        uint256 unsoldTokens = pool.tokenBalance -
-            (pool.tokensClaimable + pool.tokensLiquidity);
+        uint256 unsoldTokens = pool.tokenBalance - (pool.tokensClaimable + pool.tokensLiquidity);
         if (unsoldTokens > 0) {
             pool.tokenBalance -= unsoldTokens;
             if (pool.options.leftoverTokenOption == 0) {
@@ -285,24 +244,13 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
                 // Vest for the owner
                 pool.token.approve(address(vestingContract), unsoldTokens);
                 // In Presale.sol
-                vestingContract.createVesting(
-                    msg.sender,
-                    unsoldTokens,
-                    block.timestamp,
-                    pool.options.vestingDuration
-                );
+                vestingContract.createVesting(msg.sender, unsoldTokens, block.timestamp, pool.options.vestingDuration);
                 emit LeftoverTokensVested(unsoldTokens, owner());
             }
         }
     }
 
-    function finalize()
-        external
-        onlyOwner
-        whenNotPaused
-        nonReentrant
-        returns (bool)
-    {
+    function finalize() external onlyOwner whenNotPaused nonReentrant returns (bool) {
         if (pool.state != 2) revert InvalidState(pool.state);
         if (pool.weiRaised < pool.options.softCap) revert SoftCapNotReached();
 
@@ -317,10 +265,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
             if (pool.options.currency == address(0)) {
                 payable(houseAddress).sendValue(houseAmount);
             } else {
-                IERC20(pool.options.currency).safeTransfer(
-                    houseAddress,
-                    houseAmount
-                );
+                IERC20(pool.options.currency).safeTransfer(houseAddress, houseAmount);
             }
             emit HouseFundsDistributed(houseAddress, houseAmount);
         }
@@ -335,13 +280,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         return true;
     }
 
-    function cancel()
-        external
-        nonReentrant
-        onlyOwner
-        whenNotPaused
-        returns (bool)
-    {
+    function cancel() external nonReentrant onlyOwner whenNotPaused returns (bool) {
         if (pool.state > 2) revert InvalidState(pool.state);
         pool.state = 3;
         // Return all deposited tokens to creator
@@ -377,12 +316,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         // Set up vesting for vested tokens
         if (vestedTokens > 0) {
             pool.token.approve(address(vestingContract), vestedTokens);
-            vestingContract.createVesting(
-                msg.sender,
-                vestedTokens,
-                block.timestamp,
-                pool.options.vestingDuration
-            );
+            vestingContract.createVesting(msg.sender, vestedTokens, block.timestamp, pool.options.vestingDuration);
         }
 
         emit TokenClaim(msg.sender, totalTokens, block.timestamp);
@@ -401,8 +335,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         if (
             pool.options.currency == address(0)
                 ? address(this).balance < amount
-                : IERC20(pool.options.currency).balanceOf(address(this)) <
-                    amount
+                : IERC20(pool.options.currency).balanceOf(address(this)) < amount
         ) {
             revert InsufficientContractBalance();
         }
@@ -429,11 +362,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         emit Withdrawn(msg.sender, amount);
     }
 
-    function rescueTokens(
-        address _token,
-        address _to,
-        uint256 _amount
-    ) external onlyOwner {
+    function rescueTokens(address _token, address _to, uint256 _amount) external onlyOwner {
         if (_to == address(0)) revert InvalidAddress();
         if (pool.state < 3) revert CannotRescueBeforeFinalization();
         if (_token == address(pool.token) && block.timestamp <= claimDeadline) {
@@ -453,10 +382,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
 
     //remove . Consider batch processing or a merkle tree for scalability
 
-    function updateWhitelist(
-        address[] calldata _addresses,
-        bool _add
-    ) external onlyOwner {
+    function updateWhitelist(address[] calldata _addresses, bool _add) external onlyOwner {
         if (state != PresaleState.Pending) revert InvalidState(uint8(state));
         uint256 length = _addresses.length;
         if (length > 100) revert BatchTooLarge();
@@ -480,17 +406,14 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     }
 
     function calculateTotalTokensNeeded() external view returns (uint256) {
-        uint256 currencyDecimals = pool.options.currency == address(0)
-            ? 18
-            : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
+        uint256 currencyDecimals = pool.options.currency == address(0) ? 18 : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
         uint256 tokenDecimals = pool.token.decimals();
-        uint256 presaleTokens = (pool.options.hardCap *
-            pool.options.presaleRate *
-            10 ** tokenDecimals) / 10 ** currencyDecimals;
-        uint256 liquidityTokens = (((pool.options.hardCap *
-            pool.options.liquidityBps) / BASIS_POINTS) *
-            pool.options.listingRate *
-            10 ** tokenDecimals) / 10 ** currencyDecimals;
+        uint256 presaleTokens =
+            (pool.options.hardCap * pool.options.presaleRate * 10 ** tokenDecimals) / 10 ** currencyDecimals;
+        uint256 liquidityTokens = (
+            ((pool.options.hardCap * pool.options.liquidityBps) / BASIS_POINTS) * pool.options.listingRate
+                * 10 ** tokenDecimals
+        ) / 10 ** currencyDecimals;
         return presaleTokens + liquidityTokens;
     }
 
@@ -503,41 +426,25 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     }
 
     function _liquify(uint256 _currencyAmount, uint256 _tokenAmount) private {
-        uint256 minToken = (_tokenAmount *
-            (BASIS_POINTS - pool.options.slippageBps)) / BASIS_POINTS;
-        uint256 minCurrency = (_currencyAmount *
-            (BASIS_POINTS - pool.options.slippageBps)) / BASIS_POINTS;
+        uint256 minToken = (_tokenAmount * (BASIS_POINTS - pool.options.slippageBps)) / BASIS_POINTS;
+        uint256 minCurrency = (_currencyAmount * (BASIS_POINTS - pool.options.slippageBps)) / BASIS_POINTS;
 
         pool.token.approve(address(pool.uniswapV2Router02), _tokenAmount); // Fixed with SafeERC20 for ERC20
         address pair = IUniswapV2Factory(pool.factory).getPair(
-            address(pool.token),
-            pool.options.currency == address(0)
-                ? pool.weth
-                : pool.options.currency
+            address(pool.token), pool.options.currency == address(0) ? pool.weth : pool.options.currency
         );
         if (pair == address(0)) {
             pair = IUniswapV2Factory(pool.factory).createPair(
-                address(pool.token),
-                pool.options.currency == address(0)
-                    ? pool.weth
-                    : pool.options.currency
+                address(pool.token), pool.options.currency == address(0) ? pool.weth : pool.options.currency
             );
         }
 
         if (pool.options.currency == address(0)) {
             pool.uniswapV2Router02.addLiquidityETH{value: _currencyAmount}(
-                address(pool.token),
-                _tokenAmount,
-                minToken,
-                minCurrency,
-                address(this),
-                block.timestamp + 600
+                address(pool.token), _tokenAmount, minToken, minCurrency, address(this), block.timestamp + 600
             );
         } else {
-            ERC20(pool.options.currency).approve(
-                address(pool.uniswapV2Router02),
-                _currencyAmount
-            ); // Fixed with ERC20
+            ERC20(pool.options.currency).approve(address(pool.uniswapV2Router02), _currencyAmount); // Fixed with ERC20
             pool.uniswapV2Router02.addLiquidity(
                 address(pool.token),
                 pool.options.currency,
@@ -548,10 +455,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
                 address(this),
                 block.timestamp + 600
             );
-            ERC20(pool.options.currency).approve(
-                address(pool.uniswapV2Router02),
-                0
-            ); // Reset approval
+            ERC20(pool.options.currency).approve(address(pool.uniswapV2Router02), 0); // Reset approval
         }
         pool.token.approve(address(pool.uniswapV2Router02), 0); // Reset approval
 
@@ -564,10 +468,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         liquidityLocker.lock(pair, lpAmount, unlockTime, owner());
     }
 
-    function _prevalidatePurchase(
-        address _beneficiary,
-        uint256 _amount
-    ) private view {
+    function _prevalidatePurchase(address _beneficiary, uint256 _amount) private view {
         PresaleOptions memory opts = pool.options;
         if (pool.state != 2) revert InvalidState(pool.state);
         if (_beneficiary == address(0)) revert InvalidContributorAddress();
@@ -586,26 +487,13 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         if (_options.hardCap == 0 || _options.softCap < _options.hardCap / 4) {
             revert InvalidInitialization();
         }
-        if (
-            _options.max == 0 ||
-            _options.min == 0 ||
-            _options.min > _options.max
-        ) revert InvalidInitialization();
-        if (
-            _options.liquidityBps < 5000 ||
-            !isAllowedLiquidityBps(_options.liquidityBps)
-        ) revert InvalidLiquidityBps();
+        if (_options.max == 0 || _options.min == 0 || _options.min > _options.max) revert InvalidInitialization();
+        if (_options.liquidityBps < 5000 || !isAllowedLiquidityBps(_options.liquidityBps)) revert InvalidLiquidityBps();
         if (_options.slippageBps > 500) revert InvalidInitialization();
-        if (
-            _options.presaleRate == 0 ||
-            _options.listingRate == 0 ||
-            _options.listingRate >= _options.presaleRate
-        ) {
+        if (_options.presaleRate == 0 || _options.listingRate == 0 || _options.listingRate >= _options.presaleRate) {
             revert InvalidInitialization();
         }
-        if (
-            _options.start < block.timestamp || _options.end <= _options.start
-        ) {
+        if (_options.start < block.timestamp || _options.end <= _options.start) {
             revert InvalidInitialization();
         }
         if (_options.lockupDuration == 0) revert InvalidInitialization();
@@ -629,55 +517,35 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
 
     function userTokens(address _contributor) public view returns (uint256) {
         if (pool.weiRaised == 0) return 0;
-        uint256 currencyDecimals = pool.options.currency == address(0)
-            ? 18
-            : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
+        uint256 currencyDecimals = pool.options.currency == address(0) ? 18 : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
         uint256 tokenDecimals = pool.token.decimals();
-        return
-            (contributions[_contributor] *
-                pool.options.presaleRate *
-                10 ** tokenDecimals) / 10 ** currencyDecimals;
+        return (contributions[_contributor] * pool.options.presaleRate * 10 ** tokenDecimals) / 10 ** currencyDecimals;
     }
 
     function _tokensForLiquidity() private view returns (uint256) {
-        uint256 currencyDecimals = pool.options.currency == address(0)
-            ? 18
-            : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
+        uint256 currencyDecimals = pool.options.currency == address(0) ? 18 : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
         uint256 tokenDecimals = pool.token.decimals();
-        return
-            (((pool.options.hardCap * pool.options.liquidityBps) /
-                BASIS_POINTS) *
-                pool.options.listingRate *
-                10 ** tokenDecimals) / 10 ** currencyDecimals;
+        return (
+            ((pool.options.hardCap * pool.options.liquidityBps) / BASIS_POINTS) * pool.options.listingRate
+                * 10 ** tokenDecimals
+        ) / 10 ** currencyDecimals;
     }
 
     function _tokensForPresale() private view returns (uint256) {
-        uint256 currencyDecimals = pool.options.currency == address(0)
-            ? 18
-            : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
+        uint256 currencyDecimals = pool.options.currency == address(0) ? 18 : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
         uint256 tokenDecimals = pool.token.decimals();
-        return
-            (pool.options.hardCap *
-                pool.options.presaleRate *
-                10 ** tokenDecimals) / 10 ** currencyDecimals;
+        return (pool.options.hardCap * pool.options.presaleRate * 10 ** tokenDecimals) / 10 ** currencyDecimals;
     }
 
     function _weiForLiquidity() private view returns (uint256) {
         return (pool.weiRaised * pool.options.liquidityBps) / BASIS_POINTS;
     }
 
-    function retryLiquify(
-        uint256 _currencyAmount,
-        uint256 _tokenAmount
-    ) external onlyOwner {
+    function retryLiquify(uint256 _currencyAmount, uint256 _tokenAmount) external onlyOwner {
         if (pool.state != 4) revert InvalidState(pool.state);
-        if (
-            _currencyAmount > pool.weiRaised || _tokenAmount > pool.tokenBalance
-        ) {
+        if (_currencyAmount > pool.weiRaised || _tokenAmount > pool.tokenBalance) {
             revert InvalidLiquidityAmounts();
         }
         _liquify(_currencyAmount, _tokenAmount);
     }
-
-  
 }

@@ -31,7 +31,8 @@ contract InvariantVesting is StdInvariant, Test {
     uint256 constant MAX_AMOUNT = 100_000 ether; // Max reasonable amount per schedule
 
     // --- Setup ---
-    function setUp() public virtual { // Use virtual if extending later
+    function setUp() public virtual {
+        // Use virtual if extending later
         deployer = address(this);
         // Use a fixed, distinct address for the owner for clarity
         owner = address(0x000000000000000000000000000000000000bEEF);
@@ -109,7 +110,7 @@ contract InvariantVesting is StdInvariant, Test {
         duration = bound(duration, MIN_VESTING_DURATION, MAX_VESTING_DURATION);
 
         if (vesting.scheduleCount(beneficiary) >= MAX_SCHEDULES_PER_USER) {
-             return; // Skip if user has too many schedules
+            return; // Skip if user has too many schedules
         }
 
         // --- Execute Action ---
@@ -210,7 +211,6 @@ contract InvariantVesting is StdInvariant, Test {
      */
     // function invariant_totalAllocatedEqualsSumOfRemaining() public view { ... }
 
-
     /**
      * @notice Checks if the contract's token balance can cover all current allocations.
      * This should now hold true as external token manipulation is prevented.
@@ -232,7 +232,7 @@ contract InvariantVesting is StdInvariant, Test {
             address user = users[u];
             uint256 count = vesting.scheduleCount(user);
             for (uint256 i = 0; i < count; i++) {
-                (uint256 total, uint256 released, , , bool exists) = vesting.schedules(user, i);
+                (uint256 total, uint256 released,,, bool exists) = vesting.schedules(user, i);
                 if (exists) {
                     assertTrue(released <= total, "Invariant Violation: Schedule released > total");
                 }
@@ -244,16 +244,16 @@ contract InvariantVesting is StdInvariant, Test {
      * @notice Checks if vestedAmount calculation seems consistent (never exceeds total).
      */
     function invariant_vestedAmountCalculation() public view {
-         // Check only for known users
+        // Check only for known users
         for (uint256 u = 0; u < users.length; u++) {
             address user = users[u];
             uint256 count = vesting.scheduleCount(user);
             for (uint256 i = 0; i < count; i++) {
-                (uint256 total, , , , bool exists) = vesting.schedules(user, i);
-                 if (exists && total > 0) {
+                (uint256 total,,,, bool exists) = vesting.schedules(user, i);
+                if (exists && total > 0) {
                     uint256 vested = vesting.vestedAmount(user, i);
                     assertTrue(vested <= total, "Invariant Violation: vestedAmount() > totalAmount");
-                 }
+                }
             }
         }
     }
