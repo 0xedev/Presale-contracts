@@ -9,6 +9,9 @@ libs = ["lib"]
 [rpc_endpoints]
 sepolia = "${SEPOLIA_RPC_URL}"
 
+[fuzz]
+runs = 10000
+
 [profile.remappings]
 "@openzeppelin/contracts/" = "lib/openzeppelin-contracts/contracts/"
 "v2-core/" = "lib/v2-core/"

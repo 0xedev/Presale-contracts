@@ -136,7 +136,7 @@ interface IPresale {
      */
     event Cancel(address indexed owner, uint256 timestamp);
 
- event Paused(address indexed account);
+    event Paused(address indexed account);
     event Unpaused(address indexed account);
     event TokensRescued(address indexed token, address indexed to, uint256 amount);
     event Withdrawn(address indexed owner, uint256 amount);
@@ -147,96 +147,91 @@ interface IPresale {
     event LeftoverTokensBurned(uint256 amount);
     event LeftoverTokensVested(uint256 amount, address indexed beneficiary);
     event HouseFundsDistributed(address indexed house, uint256 amount);
+    event MerkleRootUpdated(bytes32 indexed _merkleRoot);
+    event ClaimDeadlineExtended(uint256 newDeadline);
+error InvalidLiquidityAmounts();
+    error BatchTooLarge();
+    error InvalidDeadline();
+    error CannotRescueBeforeFinalization();
+    /// @notice Thrown when the contract is paused and an action cannot be performed.
+    error ContractPaused();
 
-/// @notice Thrown when the contract is paused and an action cannot be performed.
-error ContractPaused();
+    /// @notice Thrown when ETH is not accepted for the current operation.
+    error ETHNotAccepted();
 
-/// @notice Thrown when ETH is not accepted for the current operation.
-error ETHNotAccepted();
+    /// @notice Thrown when stablecoins are not accepted for the current operation.
+    error StablecoinNotAccepted();
 
-/// @notice Thrown when stablecoins are not accepted for the current operation.
-error StablecoinNotAccepted();
+    /// @notice Thrown when the presale is not active.
+    error NotActive();
 
-/// @notice Thrown when the presale is not active.
-error NotActive();
+    /// @notice Thrown when the claim period has expired.
+    error ClaimPeriodExpired();
 
-/// @notice Thrown when the claim period has expired.
-error ClaimPeriodExpired();
+    /// @notice Thrown when there are no tokens available to claim.
+    error NoTokensToClaim();
 
-/// @notice Thrown when there are no tokens available to claim.
-error NoTokensToClaim();
+    /// @notice Thrown when the token balance is insufficient for the operation.
+    error InsufficientTokenBalance();
 
-/// @notice Thrown when the token balance is insufficient for the operation.
-error InsufficientTokenBalance();
+    /// @notice Thrown when there are no funds available to refund.
+    error NoFundsToRefund();
 
-/// @notice Thrown when there are no funds available to refund.
-error NoFundsToRefund();
+    /// @notice Thrown when the contract balance is insufficient for the operation.
+    error InsufficientContractBalance();
 
-/// @notice Thrown when the contract balance is insufficient for the operation.
-error InsufficientContractBalance();
+    /// @notice Thrown when the contributor address is invalid.
+    error InvalidContributorAddress();
 
-/// @notice Thrown when the contributor address is invalid.
-error InvalidContributorAddress();
+    /// @notice Thrown when the hard cap for the presale is exceeded.
+    error HardCapExceeded();
 
-/// @notice Thrown when the hard cap for the presale is exceeded.
-error HardCapExceeded();
+    /// @notice Thrown when the contribution is below the minimum allowed amount.
+    error BelowMinimumContribution();
 
-/// @notice Thrown when the contribution is below the minimum allowed amount.
-error BelowMinimumContribution();
+    /// @notice Thrown when the contribution exceeds the maximum allowed amount.
+    error ExceedsMaximumContribution();
 
-/// @notice Thrown when the contribution exceeds the maximum allowed amount.
-error ExceedsMaximumContribution();
+    /// @notice Thrown when the contributor is not whitelisted.
+    error NotWhitelisted();
 
-/// @notice Thrown when the contributor is not whitelisted.
-error NotWhitelisted();
+    /// @notice Thrown when an invalid address is provided.
+    error InvalidAddress();
 
-/// @notice Thrown when an invalid address is provided.
-error InvalidAddress();
+    /// @notice Thrown when attempting to rescue presale tokens, which is not allowed.
+    error CannotRescuePresaleTokens();
 
-/// @notice Thrown when attempting to rescue presale tokens, which is not allowed.
-error CannotRescuePresaleTokens();
+    /// @notice Thrown when the contract is already paused.
+    error AlreadyPaused();
 
-/// @notice Thrown when the contract is already paused.
-error AlreadyPaused();
+    /// @notice Thrown when the contract is not paused but an action requires it to be paused.
+    error NotPaused();
 
-/// @notice Thrown when the contract is not paused but an action requires it to be paused.
-error NotPaused();
+    /// @notice Thrown when the contribution results in zero tokens being allocated.
+    error ZeroTokensForContribution();
 
-/// @notice Thrown when the contribution results in zero tokens being allocated.
-error ZeroTokensForContribution();
+    /// @notice Thrown when the initialization parameters are invalid.
+    error InvalidInitialization();
 
-/// @notice Thrown when the initialization parameters are invalid.
-error InvalidInitialization();
+    /// @notice Thrown when the vesting duration is invalid.
+    error InvalidVestingDuration();
 
-/// @notice Thrown when the vesting duration is invalid.
-error InvalidVestingDuration();
+    /// @notice Thrown when the leftover token option is invalid.
+    error InvalidLeftoverTokenOption();
 
-/// @notice Thrown when the leftover token option is invalid.
-error InvalidLeftoverTokenOption();
+    /// @notice Thrown when the liquidity basis points (bps) are invalid.
+    error InvalidLiquidityBps();
 
-/// @notice Thrown when the liquidity basis points (bps) are invalid.
-error InvalidLiquidityBps();
+    /// @notice Thrown when the house percentage is invalid.
+    error InvalidHousePercentage();
 
-/// @notice Thrown when the house percentage is invalid.
-error InvalidHousePercentage();
+    /// @notice Thrown when the house address is invalid.
+    error InvalidHouseAddress();
 
-/// @notice Thrown when the house address is invalid.
-error InvalidHouseAddress();
+    /// @notice Thrown when the vesting percentage is invalid.
+    error InvalidVestingPercentage();
 
-/// @notice Thrown when the vesting percentage is invalid.
-error InvalidVestingPercentage();
- 
-    /**
-     * @notice Allows a user to contribute to the presale using native currency.
-     * @dev This function is payable and accepts native currency contributions.
-     */
-    function contribute() external payable;
-
-    /**
-     * @notice Allows a user to contribute to the presale using stablecoins.
-     * @param amount The amount of stablecoins to contribute.
-     */
-    function contributeStablecoin(uint256 amount) external;
+  
 
     /**
      * @notice Deposits funds into the presale contract.
