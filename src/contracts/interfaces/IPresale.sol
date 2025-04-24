@@ -25,7 +25,7 @@ interface IPresale {
     error InvalidLimitValue(); // Note: Presale.sol uses InvalidContributionLimits
     error InvalidLiquidityValue(); // Note: Presale.sol uses InvalidLiquidityBps
     error InvalidTimestampValue(); // Note: Presale.sol uses InvalidTimestamps
-
+    error InvalidHouseConfiguration();
     error NoFundsToWithdraw();
     error PresaleNotEnded();
     error InsufficientTokenDeposit(uint256 amount, uint256 totalTokensNeeded);

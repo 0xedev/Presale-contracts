@@ -32,6 +32,7 @@ contract MockLiquidityLocker is ILiquidityLocker, AccessControl {
         address owner;
         address caller; // msg.sender who called lock
     }
+
     LockCall[] public lockCalls;
 
     constructor() {
@@ -44,18 +45,13 @@ contract MockLiquidityLocker is ILiquidityLocker, AccessControl {
     /**
      * @notice Mock lock function. Primarily verified using vm.expectCall.
      */
-    function lock(address _token, uint256 _amount, uint256 _unlockTime, address _owner)
-        external
-        // onlyRole(LOCKER_ROLE) // Can omit role check in mock if tests handle caller correctly
+    function lock(address _token, uint256 _amount, uint256 _unlockTime, address _owner) external 
+    // onlyRole(LOCKER_ROLE) // Can omit role check in mock if tests handle caller correctly
     {
         // Optional: Record the call details
-        lockCalls.push(LockCall({
-            token: _token,
-            amount: _amount,
-            unlockTime: _unlockTime,
-            owner: _owner,
-            caller: msg.sender
-        }));
+        lockCalls.push(
+            LockCall({token: _token, amount: _amount, unlockTime: _unlockTime, owner: _owner, caller: msg.sender})
+        );
 
         // Emit event to satisfy test expectations if vm.expectEmit is used
         emit LiquidityLocked(_token, _amount, _unlockTime, _owner);
@@ -66,7 +62,7 @@ contract MockLiquidityLocker is ILiquidityLocker, AccessControl {
     /**
      * @notice Mock withdraw function (empty implementation).
      */
-    function withdraw(uint256 /*_lockId*/) external {
+    function withdraw(uint256 /*_lockId*/ ) external {
         // No logic needed for Presale tests
         // emit LiquidityWithdrawn(...); // Emit if needed by tests
     }
@@ -74,7 +70,7 @@ contract MockLiquidityLocker is ILiquidityLocker, AccessControl {
     /**
      * @notice Mock getLock function (returns default values).
      */
-    function getLock(uint256 /*_lockId*/) external pure returns (address, uint256, uint256, address) {
+    function getLock(uint256 /*_lockId*/ ) external pure returns (address, uint256, uint256, address) {
         // Return empty/default values, not needed for Presale tests
         return (address(0), 0, 0, address(0));
     }
