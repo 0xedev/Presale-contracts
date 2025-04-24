@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract LiquidityLocker is Ownable, ReentrancyGuard {
+contract LiquidityLocker is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
+
+    bytes32 public constant LOCKER_ROLE = keccak256("LOCKER_ROLE");
 
     struct Lock {
         address token;
@@ -30,9 +32,14 @@ contract LiquidityLocker is Ownable, ReentrancyGuard {
     error TokensStillLocked();
     error NoTokensToWithdraw();
 
-    constructor() Ownable(msg.sender) {}
+    constructor() {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender); // PresaleFactory is admin
+    }
 
-    function lock(address _token, uint256 _amount, uint256 _unlockTime, address _owner) external onlyOwner {
+    function lock(address _token, uint256 _amount, uint256 _unlockTime, address _owner)
+        external
+        onlyRole(LOCKER_ROLE)
+    {
         if (_token == address(0)) revert InvalidTokenAddress();
         if (_amount == 0) revert ZeroAmount();
         if (_unlockTime <= block.timestamp) revert InvalidUnlockTime();
@@ -44,6 +51,7 @@ contract LiquidityLocker is Ownable, ReentrancyGuard {
         emit LiquidityLocked(_token, _amount, _unlockTime, _owner);
     }
 
+    // Rest of the contract remains unchanged
     function withdraw(uint256 _lockId) external {
         if (_lockId >= locks.length) revert InvalidLockId();
         Lock storage lockData = locks[_lockId];

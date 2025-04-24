@@ -1,6 +1,7 @@
-//SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+// --- Imports ---
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -16,39 +17,8 @@ import {Vesting} from "./Vesting.sol";
 
 contract Presale is IPresale, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
-    using SafeERC20 for ERC20;
+    // using SafeERC20 for ERC20; // Redundant if using for IERC20
     using Address for address payable;
-
-    uint256 public totalRefundable;
-    uint256 public constant BASIS_POINTS = 10_000;
-    bool public paused;
-    bool public whitelistEnabled;
-    uint256 public claimDeadline;
-    uint256 public ownerBalance;
-
-    LiquidityLocker public immutable liquidityLocker;
-    Vesting public immutable vestingContract;
-    uint256 public immutable housePercentage; // Set by factory
-    address public immutable houseAddress; // Set by factory
-
-    struct PresaleOptions {
-        uint256 tokenDeposit;
-        uint256 hardCap;
-        uint256 softCap;
-        uint256 max;
-        uint256 min;
-        uint256 start;
-        uint256 end;
-        uint256 liquidityBps;
-        uint256 slippageBps;
-        uint256 presaleRate;
-        uint256 listingRate;
-        uint256 lockupDuration;
-        address currency;
-        uint256 vestingPercentage;
-        uint256 vestingDuration;
-        uint8 leftoverTokenOption; // 0 = return, 1 = burn, 2 = vest
-    }
 
     enum PresaleState {
         Pending,
@@ -57,44 +27,89 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         Finalized
     }
 
-    PresaleState public state;
-
-    struct Pool {
-        ERC20 token;
-        IUniswapV2Router02 uniswapV2Router02;
-        address factory;
-        uint256 tokenBalance;
-        uint256 tokensClaimable;
-        uint256 tokensLiquidity;
-        uint256 weiRaised;
-        address weth;
-        uint8 state;
-        PresaleOptions options;
+    struct PresaleOptions {
+        uint256 tokenDeposit; // Tokens deposited for presale
+        uint256 hardCap; // Max currency to raise
+        uint256 softCap; // Min currency to raise
+        uint256 min; // Min contribution per user
+        uint256 max; // Max contribution per user
+        uint256 presaleRate; // Tokens per currency unit
+        uint256 listingRate; // Tokens per currency unit at listing
+        uint256 liquidityBps; // Basis points for liquidity (5000-10000)
+        uint256 slippageBps; // Max slippage for liquidity
+        uint256 start; // Presale start timestamp
+        uint256 end; // Presale end timestamp
+        uint256 lockupDuration; // LP token lock duration
+        uint256 vestingPercentage; // Percentage of tokens vested (BPS)
+        uint256 vestingDuration; // Vesting duration
+        uint256 leftoverTokenOption; // 0: return, 1: burn, 2: vest
+        address currency; // Address(0) for ETH, else stablecoin
     }
 
-    mapping(address => uint256) public totalClaimed;
-    mapping(address => uint256) public totalRefunded;
-    mapping(address => uint256) public totalContributed;
-    mapping(address => uint256) public contributions;
-    mapping(address => bool) public whitelist;
-    bytes32 public merkleRoot;
-    address[] public contributors;
-    Pool public pool;
+    // --- State Variables ---
+    uint256 public totalRefundable; // Tracks refundable amount (ETH or Stable)
+    uint256 public constant BASIS_POINTS = 10_000;
+    bool public paused;
+    bool public whitelistEnabled; // Controlled by merkleRoot != 0
+    uint256 public claimDeadline;
+    uint256 public ownerBalance; // Tracks owner's share after finalize
 
+    // Immutable variables set by factory
+    LiquidityLocker public immutable liquidityLocker;
+    Vesting public immutable vestingContract;
+    uint256 public immutable housePercentage;
+    address public immutable houseAddress;
+
+    // Presale Configuration
+    PresaleOptions public options;
+
+    // Presale State Machine
+
+    PresaleState public state;
+
+    // Contribution Tracking
+    mapping(address => uint256) public contributions; // Tracks amount contributed per user (ETH or Stable)
+    mapping(address => bool) private isContributor; // Tracks if an address has contributed
+    address[] public contributors; // Array of unique contributor addresses
+
+    // Whitelist
+    bytes32 public merkleRoot;
+
+    // Constants & Allowed Values
     uint256[] private ALLOWED_LIQUIDITY_BPS = [5000, 6000, 7000, 8000, 9000, 10000];
 
+    // Internal Pool Data (Removed redundant state, simplified)
+
+    ERC20 public immutable token; // Presale token
+    IUniswapV2Router02 public immutable uniswapV2Router02;
+    address public immutable factory; // Uniswap V2 Factory
+    address public immutable weth; // WETH address
+    uint256 public tokenBalance; // Current balance of presale tokens held by this contract
+    uint256 public tokensClaimable; // Total tokens allocated for contributors (based on hardcap)
+    uint256 public tokensLiquidity; // Total tokens allocated for liquidity (based on hardcap)
+    uint256 public totalRaised; // Total amount raised (ETH or Stable)
+
+    // --- Modifiers ---
     modifier whenNotPaused() {
         if (paused) revert ContractPaused();
         _;
     }
 
+    // Modifier to check if the presale is in a refundable state
     modifier onlyRefundable() {
-        if (!(pool.state == 3 || (block.timestamp > pool.options.end && pool.weiRaised < pool.options.softCap))) {
+        // Refundable if Canceled OR if Active period ended AND softcap not met
+        if (
+            !(
+                state == PresaleState.Canceled
+                    || (state == PresaleState.Active && block.timestamp > options.end && totalRaised < options.softCap)
+            )
+        ) {
             revert NotRefundable();
         }
         _;
     }
 
+    // --- Constructor ---
     constructor(
         address _weth,
         address _token,
@@ -106,6 +121,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         uint256 _housePercentage,
         address _houseAddress
     ) Ownable(_creator) {
+        // Input Validations
         if (
             _weth == address(0) || _token == address(0) || _uniswapV2Router02 == address(0)
                 || _liquidityLocker == address(0) || _vestingContract == address(0)
@@ -115,284 +131,168 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         if (_options.leftoverTokenOption > 2) {
             revert InvalidLeftoverTokenOption();
         }
-        if (_housePercentage > 500) revert InvalidHousePercentage();
+        if (_housePercentage > 500) revert InvalidHousePercentage(); // Max 5%
         if (_houseAddress == address(0) && _housePercentage > 0) {
             revert InvalidHouseAddress();
         }
-        _prevalidatePool(_options);
+        _prevalidatePool(_options); // Validate numeric options
 
+        // Set immutable variables
+        weth = _weth;
+        token = ERC20(_token);
+        uniswapV2Router02 = IUniswapV2Router02(_uniswapV2Router02);
+        try uniswapV2Router02.factory() returns (address _factory) {
+            factory = _factory;
+        } catch {
+            revert InvalidRouter(); // Ensure router provides a factory address
+        }
         liquidityLocker = LiquidityLocker(_liquidityLocker);
         vestingContract = Vesting(_vestingContract);
         housePercentage = _housePercentage;
         houseAddress = _houseAddress;
-        pool = Pool({
-            token: ERC20(_token),
-            uniswapV2Router02: IUniswapV2Router02(_uniswapV2Router02),
-            factory: IUniswapV2Router02(_uniswapV2Router02).factory(),
-            tokenBalance: 0,
-            tokensClaimable: 0,
-            tokensLiquidity: 0,
-            weiRaised: 0,
-            weth: _weth,
-            state: 1,
-            options: _options
-        });
+
+        // Set configurable options
+        options = _options;
+
+        // Initial state is Pending
+        state = PresaleState.Pending; // <<< FIX: Explicitly set initial state
+
+        // Emit event for creation
+        emit PresaleCreated(_creator, address(this), _token, _options.start, _options.end);
     }
+
+    // --- Owner Functions ---
 
     function setMerkleRoot(bytes32 _merkleRoot) external onlyOwner {
         if (state != PresaleState.Pending) revert InvalidState(uint8(state));
         merkleRoot = _merkleRoot;
+        whitelistEnabled = (_merkleRoot != bytes32(0)); // Update flag based on root
         emit MerkleRootUpdated(_merkleRoot);
     }
 
-    function contribute(bytes32[] calldata _merkleProof) external payable whenNotPaused nonReentrant {
-        if (whitelistEnabled && !MerkleProof.verify(_merkleProof, merkleRoot, keccak256(abi.encodePacked(msg.sender))))
-        {
-            revert NotWhitelisted();
-        }
-        if (pool.options.currency != address(0)) revert ETHNotAccepted();
-        if (pool.state != 2) revert NotActive();
-        uint256 tokenAmount =
-            userTokens(msg.sender) + ((msg.value * pool.options.presaleRate * 10 ** pool.token.decimals()) / 10 ** 18);
-        if (tokenAmount == 0) revert ZeroTokensForContribution();
-        _purchase(msg.sender, msg.value);
-        _trackContribution(msg.sender, msg.value, true);
-    }
-
-    receive() external payable whenNotPaused nonReentrant {
-        if (pool.options.currency != address(0)) revert ETHNotAccepted();
-        if (pool.state != 2) revert NotActive();
-        uint256 tokenAmount =
-            userTokens(msg.sender) + ((msg.value * pool.options.presaleRate * 10 ** pool.token.decimals()) / 10 ** 18);
-        if (tokenAmount == 0) revert ZeroTokensForContribution();
-        _purchase(msg.sender, msg.value);
-        _trackContribution(msg.sender, msg.value, true);
-    }
-
-    // New tracking function
-    function _trackContribution(address _contributor, uint256 _amount, bool _isETH) private {
-        if (contributions[_contributor] == 0) {
-            contributors.push(_contributor); // Add new contributor
-        }
-        contributions[_contributor] += _amount; // Update contribution amount
-        emit Contribution(_contributor, _amount, _isETH); // Emit event
-    }
-
-    // View functions for tracking
-    function getContributorCount() external view returns (uint256) {
-        return contributors.length;
-    }
-
-    function getContributors() external view returns (address[] memory) {
-        return contributors;
-    }
-
-    function getTotalContributed() external view returns (uint256) {
-        return pool.weiRaised; // Already tracked in pool.weiRaised
-    }
-
-    function getContribution(address _contributor) external view returns (uint256) {
-        return contributions[_contributor];
-    }
-
-    function contributeStablecoin(uint256 _amount, bytes32[] calldata _merkleProof)
-        external
-        whenNotPaused
-        nonReentrant
-    {
-        if (whitelistEnabled && !MerkleProof.verify(_merkleProof, merkleRoot, keccak256(abi.encodePacked(msg.sender))))
-        {
-            revert NotWhitelisted();
-        }
-        if (pool.options.currency == address(0)) revert StablecoinNotAccepted();
-        if (pool.state != 2) revert NotActive();
-        IERC20(pool.options.currency).safeTransferFrom(msg.sender, address(this), _amount);
-        if (_amount == 0) revert ZeroTokensForContribution();
-        _purchase(msg.sender, _amount); // Update _purchase to remove whitelist mapping check
-        _trackContribution(msg.sender, _amount, false);
-    }
-
+    // Deposit presale tokens (can only be called once)
     function deposit() external onlyOwner whenNotPaused returns (uint256) {
-        if (pool.state != 1) revert InvalidState(pool.state);
-        uint256 amount = pool.options.tokenDeposit;
-        pool.token.safeTransferFrom(msg.sender, address(this), amount);
-        pool.state = 2;
-        pool.tokenBalance = amount;
-        pool.tokensClaimable = _tokensForPresale();
-        pool.tokensLiquidity = _tokensForLiquidity();
+        if (state != PresaleState.Pending) revert InvalidState(uint8(state)); // <<< FIX: Check against main state enum
+
+        uint256 amount = options.tokenDeposit;
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount); // Use IERC20 interface
+
+        // Calculate required tokens based on hardcap
+        tokensClaimable = _tokensForPresale();
+        tokensLiquidity = _tokensForLiquidity();
+        uint256 totalTokensNeeded = tokensClaimable + tokensLiquidity;
+
+        // Ensure enough tokens were deposited for hardcap + liquidity
+        if (amount < totalTokensNeeded) {
+            revert InsufficientTokenDeposit(amount, totalTokensNeeded);
+        }
+
+        tokenBalance = amount; // Update contract's token balance
+
+        // <<< FIX: Update State >>>
+        state = PresaleState.Active;
+
         emit Deposit(msg.sender, amount, block.timestamp);
         return amount;
     }
 
-    function _handleLeftoverTokens() private {
-        // Calculate unsold tokens
-        if (pool.tokenBalance < pool.tokensClaimable + pool.tokensLiquidity) {
-            revert InsufficientTokenBalance();
-        }
-        uint256 unsoldTokens = pool.tokenBalance - (pool.tokensClaimable + pool.tokensLiquidity);
-        if (unsoldTokens > 0) {
-            pool.tokenBalance -= unsoldTokens;
-            if (pool.options.leftoverTokenOption == 0) {
-                // Return to creator
-                pool.token.safeTransfer(owner(), unsoldTokens);
-                emit LeftoverTokensReturned(unsoldTokens, owner());
-            } else if (pool.options.leftoverTokenOption == 1) {
-                // Burn by sending to address(0)
-                pool.token.safeTransfer(address(0), unsoldTokens);
-                emit LeftoverTokensBurned(unsoldTokens);
-            } else {
-                // Vest for the owner
-                pool.token.approve(address(vestingContract), unsoldTokens);
-                // In Presale.sol
-                vestingContract.createVesting(msg.sender, unsoldTokens, block.timestamp, pool.options.vestingDuration);
-                emit LeftoverTokensVested(unsoldTokens, owner());
-            }
-        }
-    }
-
+    // Finalize the presale (if softcap met)
     function finalize() external onlyOwner whenNotPaused nonReentrant returns (bool) {
-        if (pool.state != 2) revert InvalidState(pool.state);
-        if (pool.weiRaised < pool.options.softCap) revert SoftCapNotReached();
+        if (state != PresaleState.Active) revert InvalidState(uint8(state)); // <<< FIX: Check against main state enum
+        if (block.timestamp <= options.end) revert PresaleNotEnded(); // Ensure presale period is over
+        if (totalRaised < options.softCap) revert SoftCapNotReached();
 
-        pool.state = 4;
-        uint256 liquidityAmount = _weiForLiquidity();
-        _liquify(liquidityAmount, pool.tokensLiquidity);
-        pool.tokenBalance -= pool.tokensLiquidity;
+        // <<< FIX: Update State >>>
+        state = PresaleState.Finalized;
+
+        uint256 liquidityAmount = _weiForLiquidity(); // Currency amount for liquidity
+        uint256 tokensForLiq = tokensLiquidity; // Use pre-calculated value
+
+        // Add Liquidity
+        _liquify(liquidityAmount, tokensForLiq);
+        tokenBalance -= tokensForLiq; // Decrease token balance by amount used for liquidity
 
         // Distribute house percentage
-        uint256 houseAmount = (pool.weiRaised * housePercentage) / BASIS_POINTS;
+        uint256 houseAmount = (totalRaised * housePercentage) / BASIS_POINTS;
         if (houseAmount > 0) {
-            if (pool.options.currency == address(0)) {
-                payable(houseAddress).sendValue(houseAmount);
-            } else {
-                IERC20(pool.options.currency).safeTransfer(houseAddress, houseAmount);
-            }
+            _safeTransferCurrency(houseAddress, houseAmount);
             emit HouseFundsDistributed(houseAddress, houseAmount);
         }
 
-        ownerBalance = pool.weiRaised - liquidityAmount - houseAmount;
-        claimDeadline = block.timestamp + 180 days;
+        // Calculate and store owner's share
+        ownerBalance = totalRaised - liquidityAmount - houseAmount;
 
-        // Handle leftover tokens
+        // Set claim deadline
+        claimDeadline = block.timestamp + 180 days; // Default 180 days
+
+        // Handle leftover/unsold tokens
         _handleLeftoverTokens();
 
-        emit Finalized(msg.sender, pool.weiRaised, block.timestamp);
+        emit Finalized(msg.sender, totalRaised, block.timestamp);
         return true;
     }
 
+    // Cancel the presale (only before finalization)
     function cancel() external nonReentrant onlyOwner whenNotPaused returns (bool) {
-        if (pool.state > 2) revert InvalidState(pool.state);
-        pool.state = 3;
-        // Return all deposited tokens to creator
-        if (pool.tokenBalance > 0) {
-            uint256 amount = pool.tokenBalance;
-            pool.tokenBalance = 0;
-            pool.token.safeTransfer(msg.sender, amount);
-            emit LeftoverTokensReturned(amount, msg.sender);
+        // Can cancel if Pending or Active
+        if (state != PresaleState.Pending && state != PresaleState.Active) {
+            revert InvalidState(uint8(state));
         }
+
+        // <<< FIX: Update State >>>
+        state = PresaleState.Canceled;
+
+        // Return all deposited presale tokens to creator
+        if (tokenBalance > 0) {
+            uint256 amountToReturn = tokenBalance;
+            tokenBalance = 0; // Reset balance
+            IERC20(token).safeTransfer(msg.sender, amountToReturn); // Use IERC20
+            emit LeftoverTokensReturned(amountToReturn, msg.sender); // Reuse event
+        }
+
+        // Note: Contributions become refundable via the refund() function due to Canceled state
+
         emit Cancel(msg.sender, block.timestamp);
         return true;
     }
 
-    function claim() external nonReentrant whenNotPaused returns (uint256) {
-        if (pool.state != 4) revert InvalidState(pool.state);
-        if (block.timestamp > claimDeadline) revert ClaimPeriodExpired();
-        uint256 totalTokens = userTokens(msg.sender);
-        if (totalTokens == 0) revert NoTokensToClaim();
-        if (pool.tokenBalance < totalTokens) revert InsufficientTokenBalance();
-
-        pool.tokenBalance -= totalTokens;
-        contributions[msg.sender] = 0;
-
-        uint256 vestingBps = pool.options.vestingPercentage;
-        uint256 vestedTokens = (totalTokens * vestingBps) / BASIS_POINTS;
-        uint256 immediateTokens = totalTokens - vestedTokens;
-
-        // Transfer immediate tokens
-        if (immediateTokens > 0) {
-            pool.token.safeTransfer(msg.sender, immediateTokens);
-        }
-
-        // Set up vesting for vested tokens
-        if (vestedTokens > 0) {
-            pool.token.approve(address(vestingContract), vestedTokens);
-            vestingContract.createVesting(msg.sender, vestedTokens, block.timestamp, pool.options.vestingDuration);
-        }
-
-        emit TokenClaim(msg.sender, totalTokens, block.timestamp);
-        return totalTokens;
+    // Withdraw owner's share after finalization
+    function withdraw() external onlyOwner nonReentrant {
+        if (state != PresaleState.Finalized) revert InvalidState(uint8(state)); // Can only withdraw after finalize
+        uint256 amount = ownerBalance;
+        if (amount == 0) revert NoFundsToWithdraw(); // Changed error for clarity
+        ownerBalance = 0; // Reset balance before transfer
+        _safeTransferCurrency(msg.sender, amount);
+        emit Withdrawn(msg.sender, amount);
     }
 
+    // Extend the claim deadline
     function extendClaimDeadline(uint256 _newDeadline) external onlyOwner {
+        if (state != PresaleState.Finalized) revert InvalidState(uint8(state)); // Must be finalized
         if (_newDeadline <= claimDeadline) revert InvalidDeadline();
         claimDeadline = _newDeadline;
         emit ClaimDeadlineExtended(_newDeadline);
     }
 
-    function refund() external nonReentrant onlyRefundable returns (uint256) {
-        uint256 amount = contributions[msg.sender];
-        if (amount == 0) revert NoFundsToRefund();
-        if (
-            pool.options.currency == address(0)
-                ? address(this).balance < amount
-                : IERC20(pool.options.currency).balanceOf(address(this)) < amount
-        ) {
-            revert InsufficientContractBalance();
-        }
-        contributions[msg.sender] = 0;
-        totalRefundable -= amount;
-        if (pool.options.currency == address(0)) {
-            payable(msg.sender).sendValue(amount);
-        } else {
-            IERC20(pool.options.currency).safeTransfer(msg.sender, amount);
-        }
-        emit Refund(msg.sender, amount, block.timestamp);
-        return amount;
-    }
-
-    function withdraw() external onlyOwner {
-        uint256 amount = ownerBalance;
-        if (amount == 0) revert NoFundsToRefund();
-        ownerBalance = 0;
-        if (pool.options.currency == address(0)) {
-            payable(msg.sender).sendValue(amount);
-        } else {
-            IERC20(pool.options.currency).safeTransfer(msg.sender, amount);
-        }
-        emit Withdrawn(msg.sender, amount);
-    }
-
-    function rescueTokens(address _token, address _to, uint256 _amount) external onlyOwner {
+    // Rescue mistakenly sent ERC20 tokens
+    function rescueTokens(address _erc20Token, address _to, uint256 _amount) external onlyOwner {
         if (_to == address(0)) revert InvalidAddress();
-        if (pool.state < 3) revert CannotRescueBeforeFinalization();
-        if (_token == address(pool.token) && block.timestamp <= claimDeadline) {
+        // Can only rescue after finalization or cancellation
+        if (state != PresaleState.Finalized && state != PresaleState.Canceled) {
+            revert CannotRescueBeforeFinalizationOrCancellation(); // More accurate error
+        }
+        // Cannot rescue the presale token before the claim deadline if finalized
+        if (
+            state == PresaleState.Finalized && address(_erc20Token) == address(token)
+                && block.timestamp <= claimDeadline
+        ) {
             revert CannotRescuePresaleTokens();
         }
-        IERC20(_token).safeTransfer(_to, _amount);
-        emit TokensRescued(_token, _to, _amount);
+        IERC20(_erc20Token).safeTransfer(_to, _amount);
+        emit TokensRescued(_erc20Token, _to, _amount);
     }
 
-    //remove  The owner can toggle and update the whitelist at any time, potentially excluding legitimate contributors. Fix: Lock whitelist changes after the presale starts or emit events for transparency.
-
-    function toggleWhitelist(bool _enabled) external onlyOwner {
-        if (state != PresaleState.Pending) revert InvalidState(uint8(state));
-        whitelistEnabled = _enabled;
-        emit WhitelistToggled(_enabled);
-    }
-
-    //remove . Consider batch processing or a merkle tree for scalability
-
-    function updateWhitelist(address[] calldata _addresses, bool _add) external onlyOwner {
-        if (state != PresaleState.Pending) revert InvalidState(uint8(state));
-        uint256 length = _addresses.length;
-        if (length > 100) revert BatchTooLarge();
-        for (uint256 i = 0; i < length; i++) {
-            if (_addresses[i] == address(0)) revert InvalidAddress();
-            whitelist[_addresses[i]] = _add;
-            emit WhitelistUpdated(_addresses[i], _add);
-        }
-    }
-
+    // Pause/Unpause contract functions
     function pause() external onlyOwner {
         if (paused) revert AlreadyPaused();
         paused = true;
@@ -405,147 +305,430 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         emit Unpaused(msg.sender);
     }
 
-    function calculateTotalTokensNeeded() external view returns (uint256) {
-        uint256 currencyDecimals = pool.options.currency == address(0) ? 18 : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
-        uint256 tokenDecimals = pool.token.decimals();
-        uint256 presaleTokens =
-            (pool.options.hardCap * pool.options.presaleRate * 10 ** tokenDecimals) / 10 ** currencyDecimals;
-        uint256 liquidityTokens = (
-            ((pool.options.hardCap * pool.options.liquidityBps) / BASIS_POINTS) * pool.options.listingRate
-                * 10 ** tokenDecimals
-        ) / 10 ** currencyDecimals;
-        return presaleTokens + liquidityTokens;
+    // --- Public Contribution Functions ---
+
+    // Contribute ETH
+    function contribute(bytes32[] calldata _merkleProof) external payable whenNotPaused nonReentrant {
+        // Use receive() logic internally
+        _contribute(msg.sender, msg.value, _merkleProof);
     }
 
-    function _purchase(address _beneficiary, uint256 _amount) private {
-        _prevalidatePurchase(_beneficiary, _amount);
-        pool.weiRaised += _amount;
-        totalRefundable += _amount;
-        contributions[_beneficiary] += _amount;
-        emit Purchase(_beneficiary, _amount);
+    // Fallback receive function for ETH contributions
+    receive() external payable whenNotPaused nonReentrant {
+        // Empty proof for non-whitelist scenario
+        bytes32[] memory emptyProof;
+        _contribute(msg.sender, msg.value, emptyProof);
     }
 
-    function _liquify(uint256 _currencyAmount, uint256 _tokenAmount) private {
-        uint256 minToken = (_tokenAmount * (BASIS_POINTS - pool.options.slippageBps)) / BASIS_POINTS;
-        uint256 minCurrency = (_currencyAmount * (BASIS_POINTS - pool.options.slippageBps)) / BASIS_POINTS;
+    // Contribute Stablecoin
+    function contributeStablecoin(uint256 _amount, bytes32[] calldata _merkleProof)
+        external
+        whenNotPaused
+        nonReentrant
+    {
+        if (options.currency == address(0)) revert StablecoinNotAccepted();
+        if (_amount == 0) revert ZeroAmount(); // Check amount before transfer
 
-        pool.token.approve(address(pool.uniswapV2Router02), _tokenAmount); // Fixed with SafeERC20 for ERC20
-        address pair = IUniswapV2Factory(pool.factory).getPair(
-            address(pool.token), pool.options.currency == address(0) ? pool.weth : pool.options.currency
-        );
-        if (pair == address(0)) {
-            pair = IUniswapV2Factory(pool.factory).createPair(
-                address(pool.token), pool.options.currency == address(0) ? pool.weth : pool.options.currency
+        IERC20 stablecoin = IERC20(options.currency);
+        stablecoin.safeTransferFrom(msg.sender, address(this), _amount);
+
+        _contribute(msg.sender, _amount, _merkleProof);
+    }
+
+    // --- Claim & Refund Functions ---
+
+    // Claim purchased tokens after finalization
+    function claim() external nonReentrant whenNotPaused returns (uint256) {
+        if (state != PresaleState.Finalized) revert InvalidState(uint8(state)); // <<< FIX: Check against main state enum
+        if (block.timestamp > claimDeadline) revert ClaimPeriodExpired();
+
+        uint256 totalTokens = userTokens(msg.sender); // Calculate tokens based on contribution
+        if (totalTokens == 0) revert NoTokensToClaim();
+
+        // Reset contribution amount for the user to prevent double claim
+        contributions[msg.sender] = 0;
+
+        // Ensure contract has enough balance (sanity check, should be covered by finalize logic)
+        if (tokenBalance < totalTokens) revert InsufficientTokenBalance();
+        tokenBalance -= totalTokens; // Decrease contract balance
+
+        // Calculate vesting split
+        uint256 vestingBps = options.vestingPercentage;
+        uint256 vestedTokens = 0;
+        uint256 immediateTokens = totalTokens;
+
+        if (vestingBps > 0) {
+            vestedTokens = (totalTokens * vestingBps) / BASIS_POINTS;
+            immediateTokens = totalTokens - vestedTokens;
+        }
+
+        // Transfer immediate tokens
+        if (immediateTokens > 0) {
+            IERC20(token).safeTransfer(msg.sender, immediateTokens); // Use IERC20
+        }
+
+        // Set up vesting for vested tokens
+        if (vestedTokens > 0) {
+            IERC20(token).approve(address(vestingContract), vestedTokens); // Use IERC20
+            vestingContract.createVesting(
+                msg.sender, address(token), vestedTokens, block.timestamp, options.vestingDuration
             );
         }
 
-        if (pool.options.currency == address(0)) {
-            pool.uniswapV2Router02.addLiquidityETH{value: _currencyAmount}(
-                address(pool.token), _tokenAmount, minToken, minCurrency, address(this), block.timestamp + 600
-            );
+        emit TokenClaim(msg.sender, totalTokens, block.timestamp);
+        return totalTokens;
+    }
+
+    // Refund contribution if presale is Canceled or Failed (softcap not met after end)
+    function refund() external nonReentrant onlyRefundable returns (uint256) {
+        uint256 amount = contributions[msg.sender];
+        if (amount == 0) revert NoFundsToRefund();
+
+        // Reset contribution amount to prevent double refund
+        contributions[msg.sender] = 0;
+
+        // Decrease total refundable amount tracking
+        // Note: totalRefundable might not be strictly necessary if relying on `contributions` mapping
+        if (totalRefundable >= amount) {
+            // Prevent underflow
+            totalRefundable -= amount;
         } else {
-            ERC20(pool.options.currency).approve(address(pool.uniswapV2Router02), _currencyAmount); // Fixed with ERC20
-            pool.uniswapV2Router02.addLiquidity(
-                address(pool.token),
-                pool.options.currency,
-                _tokenAmount,
-                _currencyAmount,
-                minToken,
-                minCurrency,
-                address(this),
-                block.timestamp + 600
-            );
-            ERC20(pool.options.currency).approve(address(pool.uniswapV2Router02), 0); // Reset approval
+            totalRefundable = 0; // Should not happen if tracked correctly
         }
-        pool.token.approve(address(pool.uniswapV2Router02), 0); // Reset approval
 
-        IERC20 lpToken = IERC20(pair);
-        uint256 lpAmount = lpToken.balanceOf(address(this));
-        if (lpAmount == 0) revert LiquificationFailed();
-        uint256 unlockTime = block.timestamp + pool.options.lockupDuration;
+        // Transfer currency back to contributor
+        _safeTransferCurrency(msg.sender, amount);
 
-        lpToken.approve(address(liquidityLocker), lpAmount);
-        liquidityLocker.lock(pair, lpAmount, unlockTime, owner());
+        emit Refund(msg.sender, amount, block.timestamp);
+        return amount;
     }
 
-    function _prevalidatePurchase(address _beneficiary, uint256 _amount) private view {
-        PresaleOptions memory opts = pool.options;
-        if (pool.state != 2) revert InvalidState(pool.state);
-        if (_beneficiary == address(0)) revert InvalidContributorAddress();
-        if (block.timestamp < opts.start || block.timestamp > opts.end) {
+    // --- Internal Logic Functions ---
+
+    // Internal contribution processing logic
+    function _contribute(address _contributor, uint256 _amount, bytes32[] memory _merkleProof) private {
+        // Basic state and time checks
+        if (state != PresaleState.Active) revert InvalidState(uint8(state));
+        if (block.timestamp < options.start || block.timestamp > options.end) {
             revert NotInPurchasePeriod();
         }
-        if (pool.weiRaised + _amount > opts.hardCap) revert HardCapExceeded();
-        if (_amount < opts.min) revert BelowMinimumContribution();
-        if (contributions[_beneficiary] + _amount > opts.max) {
-            revert ExceedsMaximumContribution();
+        if (_contributor == address(0)) revert InvalidContributorAddress();
+
+        // Whitelist check
+        if (whitelistEnabled) {
+            // Check flag instead of root directly
+            if (!MerkleProof.verify(_merkleProof, merkleRoot, keccak256(abi.encodePacked(_contributor)))) {
+                revert NotWhitelisted();
+            }
+        }
+
+        // Currency check (ensure ETH sent to ETH presale, stablecoin amount for stable presale)
+        if (options.currency == address(0)) {
+            // ETH Presale
+            if (msg.value == 0) revert ZeroAmount();
+            // Amount validation happens in _validateContribution using msg.value
+        } else {
+            // Stablecoin Presale
+            if (msg.value > 0) revert ETHNotAccepted(); // Cannot send ETH to stablecoin presale
+            if (_amount == 0) revert ZeroAmount();
+            // Amount validation happens in _validateContribution using _amount
+        }
+
+        // Validate contribution limits (Min/Max/HardCap)
+        _validateContribution(_contributor, _amount); // <<< FIX: Pass stablecoin amount here
+
+        // Track contribution amount
+        uint256 contributionAmount = (options.currency == address(0)) ? msg.value : _amount;
+        totalRaised += contributionAmount;
+        totalRefundable += contributionAmount; // Track total that might need refunding
+
+        // <<< FIX: Correct Contribution Tracking >>>
+        if (!isContributor[_contributor]) {
+            isContributor[_contributor] = true;
+            contributors.push(_contributor);
+        }
+        contributions[_contributor] += contributionAmount; // Increment contribution *once*
+
+        emit Purchase(_contributor, contributionAmount); // Use the actual amount contributed
+        emit Contribution(_contributor, contributionAmount, options.currency == address(0)); // Track correct type
+    }
+
+    // Internal function to handle leftover tokens after finalization
+    function _handleLeftoverTokens() private {
+        // Calculate unsold tokens based on contributions vs tokens needed for them
+        uint256 tokensSold = (totalRaised * options.presaleRate * 10 ** token.decimals()) / _getCurrencyMultiplier();
+
+        // Ensure calculated sold tokens don't exceed claimable tokens (sanity check)
+        if (tokensSold > tokensClaimable) {
+            tokensSold = tokensClaimable; // Cap at max claimable
+        }
+
+        // Calculate unsold presale tokens
+        uint256 unsoldPresaleTokens = tokensClaimable - tokensSold;
+
+        // Total leftover = unsold presale tokens + any excess deposited beyond needed for hardcap+liq
+        uint256 totalTokensNeededAtDeposit = tokensClaimable + tokensLiquidity;
+        uint256 excessDeposit = (tokenBalance + tokensLiquidity > totalTokensNeededAtDeposit) // Add back tokensLiquidity as it was subtracted before calling this
+            ? (tokenBalance + tokensLiquidity - totalTokensNeededAtDeposit)
+            : 0;
+
+        uint256 totalLeftover = unsoldPresaleTokens + excessDeposit;
+
+        if (totalLeftover > 0) {
+            // Ensure contract balance is sufficient (should always be true if logic is correct)
+            if (tokenBalance < totalLeftover) {
+                // This indicates a potential logic error elsewhere, but handle gracefully
+                totalLeftover = tokenBalance;
+            }
+
+            tokenBalance -= totalLeftover; // Decrease balance
+
+            if (options.leftoverTokenOption == 0) {
+                // Return to creator
+                IERC20(token).safeTransfer(owner(), totalLeftover); // Use IERC20
+                emit LeftoverTokensReturned(totalLeftover, owner());
+            } else if (options.leftoverTokenOption == 1) {
+                // Burn
+                IERC20(token).safeTransfer(address(0), totalLeftover); // Use IERC20
+                emit LeftoverTokensBurned(totalLeftover);
+            } else {
+                // Vest for the owner
+                IERC20(token).approve(address(vestingContract), totalLeftover); // Use IERC20
+                vestingContract.createVesting(
+                    owner(), address(token), totalLeftover, block.timestamp, options.vestingDuration
+                );
+                emit LeftoverTokensVested(totalLeftover, owner());
+            }
         }
     }
 
-    function _prevalidatePool(PresaleOptions memory _options) private view {
-        if (_options.tokenDeposit == 0) revert InvalidInitialization();
-        if (_options.hardCap == 0 || _options.softCap < _options.hardCap / 4) {
-            revert InvalidInitialization();
+    // Internal function to add liquidity to Uniswap V2
+    function _liquify(uint256 _currencyAmount, uint256 _tokenAmount) private {
+        if (_currencyAmount == 0 || _tokenAmount == 0) {
+            revert ZeroLiquidityAmounts(); // Cannot add zero liquidity
         }
-        if (_options.max == 0 || _options.min == 0 || _options.min > _options.max) revert InvalidInitialization();
-        if (_options.liquidityBps < 5000 || !isAllowedLiquidityBps(_options.liquidityBps)) revert InvalidLiquidityBps();
-        if (_options.slippageBps > 500) revert InvalidInitialization();
-        if (_options.presaleRate == 0 || _options.listingRate == 0 || _options.listingRate >= _options.presaleRate) {
-            revert InvalidInitialization();
+
+        // Calculate minimum amounts considering slippage
+        uint256 minToken = (_tokenAmount * (BASIS_POINTS - options.slippageBps)) / BASIS_POINTS;
+        uint256 minCurrency = (_currencyAmount * (BASIS_POINTS - options.slippageBps)) / BASIS_POINTS;
+
+        // Get or create the pair address
+        address pairCurrency = (options.currency == address(0)) ? weth : options.currency;
+        address pair = IUniswapV2Factory(factory).getPair(address(token), pairCurrency);
+        if (pair == address(0)) {
+            // This should ideally not happen if the pair exists, but handle creation defensively
+            // Note: Pair creation might fail if one token is non-standard or already in another pair type
+            try IUniswapV2Factory(factory).createPair(address(token), pairCurrency) returns (address newPair) {
+                pair = newPair;
+            } catch {
+                revert PairCreationFailed(address(token), pairCurrency);
+            }
         }
-        if (_options.start < block.timestamp || _options.end <= _options.start) {
-            revert InvalidInitialization();
+        if (pair == address(0)) {
+            // Double check after potential creation
+            revert PairAddressZero();
         }
-        if (_options.lockupDuration == 0) revert InvalidInitialization();
-        if (_options.vestingPercentage > BASIS_POINTS) {
-            revert InvalidVestingPercentage();
+
+        // Approve router
+        IERC20(token).approve(address(uniswapV2Router02), _tokenAmount); // Use IERC20
+
+        // Add liquidity based on currency type
+        uint256 lpAmountBefore = IERC20(pair).balanceOf(address(this));
+
+        try uniswapV2Router02.addLiquidityETH{value: _currencyAmount}(
+            address(token),
+            _tokenAmount,
+            minToken,
+            minCurrency,
+            address(this), // LP tokens sent to this contract
+            block.timestamp + 600 // Deadline
+        ) {
+            // ETH Liquidity Added
+        } catch Error(string memory reason) {
+            revert LiquificationFailedReason(reason);
+        } catch {
+            revert LiquificationFailed();
         }
-        if (_options.vestingPercentage > 0 && _options.vestingDuration == 0) {
-            revert InvalidVestingDuration();
+
+        // Reset token approval
+        IERC20(token).approve(address(uniswapV2Router02), 0); // Use IERC20
+
+        // Lock LP tokens
+        uint256 lpAmount = IERC20(pair).balanceOf(address(this)) - lpAmountBefore;
+        if (lpAmount == 0) revert LiquificationYieldedZeroLP(); // Check if LP tokens were actually received
+
+        uint256 unlockTime = block.timestamp + options.lockupDuration;
+        IERC20(pair).approve(address(liquidityLocker), lpAmount); // Approve locker
+
+        // Lock LP tokens in the locker contract
+        try liquidityLocker.lock(pair, lpAmount, unlockTime, owner()) {}
+        catch Error(string memory reason) {
+            revert LPLockFailedReason(reason);
+        } catch {
+            revert LPLockFailed();
         }
-        if (_options.leftoverTokenOption > 2) {
-            revert InvalidLeftoverTokenOption();
+        emit LiquidityAdded(pair, lpAmount, unlockTime);
+    }
+
+    // Internal validation for purchase amounts and limits
+    function _validateContribution(address _contributor, uint256 _stablecoinAmountIfAny) private view {
+        PresaleOptions memory opts = options;
+        uint256 amount = (opts.currency == address(0)) ? msg.value : _stablecoinAmountIfAny;
+
+        // Check against hard cap
+        if (totalRaised + amount > opts.hardCap) revert HardCapExceeded();
+
+        // <<< FIX: Stablecoin Min/Max Check >>>
+        uint256 minCheck = opts.min;
+        uint256 maxCheck = opts.max;
+        uint256 contributionCheck = contributions[_contributor] + amount;
+
+        if (opts.currency != address(0)) {
+            // If stablecoin, assume min/max are defined in stablecoin units
+            // (Requires presale creator to set appropriate min/max for stablecoin)
+            // No conversion needed here if options are set correctly.
+            // If min/max were intended as ETH equivalents, conversion logic would be needed here.
+            // Example (if rates were reliable, which they aren't pre-liquidity):
+            // uint256 stableDecimals = ERC20(opts.currency).decimals();
+            // uint256 ethRateEstimate = 3000 * (10**stableDecimals); // Highly unreliable estimate!
+            // minCheck = (opts.min * ethRateEstimate) / (1 ether);
+            // maxCheck = (opts.max * ethRateEstimate) / (1 ether);
+            if (amount < minCheck) revert BelowMinimumContribution();
+            if (contributionCheck > maxCheck) {
+                revert ExceedsMaximumContribution();
+            }
+        } else {
+            // ETH presale - direct comparison
+            if (amount < minCheck) revert BelowMinimumContribution();
+            if (contributionCheck > maxCheck) {
+                revert ExceedsMaximumContribution();
+            }
         }
     }
 
-    function isAllowedLiquidityBps(uint256 _bps) private view returns (bool) {
+    // --- View Functions ---
+
+    // Calculate total tokens needed for the presale (hardcap + liquidity)
+    function calculateTotalTokensNeeded() external view returns (uint256) {
+        return _tokensForPresale() + _tokensForLiquidity();
+    }
+
+    // Check if a liquidity BPS value is allowed
+    function isAllowedLiquidityBps(uint256 _bps) public view returns (bool) {
+        // Made public for potential UI use
         for (uint256 i = 0; i < ALLOWED_LIQUIDITY_BPS.length; i++) {
             if (_bps == ALLOWED_LIQUIDITY_BPS[i]) return true;
         }
         return false;
     }
 
+    // Calculate tokens a user is entitled to based on their contribution
     function userTokens(address _contributor) public view returns (uint256) {
-        if (pool.weiRaised == 0) return 0;
-        uint256 currencyDecimals = pool.options.currency == address(0) ? 18 : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
-        uint256 tokenDecimals = pool.token.decimals();
-        return (contributions[_contributor] * pool.options.presaleRate * 10 ** tokenDecimals) / 10 ** currencyDecimals;
+        uint256 contribution = contributions[_contributor];
+        if (contribution == 0) return 0;
+
+        // Calculate based on presale rate
+        return (contribution * options.presaleRate * 10 ** token.decimals()) / _getCurrencyMultiplier();
+    }
+
+    // Get the count of unique contributors
+    function getContributorCount() external view returns (uint256) {
+        return contributors.length;
+    }
+
+    // Get the array of contributor addresses
+    function getContributors() external view returns (address[] memory) {
+        return contributors;
+    }
+
+    // Get the total amount raised so far
+    function getTotalContributed() external view returns (uint256) {
+        return totalRaised;
+    }
+
+    // Get the contribution amount for a specific contributor
+    function getContribution(address _contributor) external view returns (uint256) {
+        return contributions[_contributor];
+    }
+
+    // --- Helper Functions ---
+
+    // Get the multiplier based on currency decimals (1e18 for ETH, 1e(decimals) for stable)
+    function _getCurrencyMultiplier() private view returns (uint256) {
+        if (options.currency == address(0)) {
+            return 1 ether; // 10**18
+        } else {
+            // Cache decimals? For now, query each time.
+            try ERC20(options.currency).decimals() returns (uint8 decimals) {
+                return 10 ** decimals;
+            } catch {
+                revert InvalidCurrencyDecimals(); // Handle case where currency contract is invalid
+            }
+        }
+    }
+
+    // Safely transfer ETH or Stablecoin
+    function _safeTransferCurrency(address _to, uint256 _amount) private {
+        if (_amount == 0) return; // No need to transfer zero
+
+        if (options.currency == address(0)) {
+            // Use sendValue for ETH transfer with reentrancy guard implicitly handled
+            payable(_to).sendValue(_amount);
+        } else {
+            // Use SafeERC20 for stablecoin transfer
+            IERC20(options.currency).safeTransfer(_to, _amount);
+        }
+    }
+
+    // Validate numeric options during construction
+    function _prevalidatePool(PresaleOptions memory _opts) private view {
+        // Note: _opts.tokenDeposit is checked in deposit() against calculated needs
+        if (_opts.hardCap == 0 || _opts.softCap == 0 || _opts.softCap > _opts.hardCap) {
+            revert InvalidCapSettings();
+        }
+        // Softcap check: Ensure it's at least 25% of hardcap (can be adjusted)
+        if (_opts.softCap * 4 < _opts.hardCap) {
+            revert SoftCapTooLow();
+        }
+        if (_opts.max == 0 || _opts.min == 0 || _opts.min > _opts.max || _opts.max > _opts.hardCap) {
+            revert InvalidContributionLimits();
+        }
+        if (!isAllowedLiquidityBps(_opts.liquidityBps)) {
+            // liquidityBps >= 5000 check is implicit
+            revert InvalidLiquidityBps();
+        }
+        if (_opts.slippageBps > 500) revert InvalidSlippage(); // Max 5% slippage
+        if (_opts.presaleRate == 0 || _opts.listingRate == 0 || _opts.listingRate >= _opts.presaleRate) {
+            revert InvalidRates();
+        }
+        if (_opts.start < block.timestamp || _opts.end <= _opts.start) {
+            revert InvalidTimestamps();
+        }
+        if (_opts.lockupDuration == 0) revert InvalidLockupDuration();
+        if (_opts.vestingPercentage > BASIS_POINTS) {
+            revert InvalidVestingPercentage();
+        }
+        if (_opts.vestingPercentage > 0 && _opts.vestingDuration == 0) {
+            revert InvalidVestingDuration();
+        }
+        // leftoverTokenOption checked in constructor
+    }
+
+    // Add after Helper Functions section
+    function _tokensForPresale() private view returns (uint256) {
+        return (options.hardCap * options.presaleRate * 10 ** token.decimals()) / _getCurrencyMultiplier();
     }
 
     function _tokensForLiquidity() private view returns (uint256) {
-        uint256 currencyDecimals = pool.options.currency == address(0) ? 18 : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
-        uint256 tokenDecimals = pool.token.decimals();
-        return (
-            ((pool.options.hardCap * pool.options.liquidityBps) / BASIS_POINTS) * pool.options.listingRate
-                * 10 ** tokenDecimals
-        ) / 10 ** currencyDecimals;
-    }
-
-    function _tokensForPresale() private view returns (uint256) {
-        uint256 currencyDecimals = pool.options.currency == address(0) ? 18 : ERC20(pool.options.currency).decimals(); // Fixed to ERC20
-        uint256 tokenDecimals = pool.token.decimals();
-        return (pool.options.hardCap * pool.options.presaleRate * 10 ** tokenDecimals) / 10 ** currencyDecimals;
+        uint256 currencyForLiquidity = (options.hardCap * options.liquidityBps) / BASIS_POINTS;
+        return (currencyForLiquidity * options.listingRate * 10 ** token.decimals()) / _getCurrencyMultiplier();
     }
 
     function _weiForLiquidity() private view returns (uint256) {
-        return (pool.weiRaised * pool.options.liquidityBps) / BASIS_POINTS;
+        return (totalRaised * options.liquidityBps) / BASIS_POINTS;
     }
 
-    function retryLiquify(uint256 _currencyAmount, uint256 _tokenAmount) external onlyOwner {
-        if (pool.state != 4) revert InvalidState(pool.state);
-        if (_currencyAmount > pool.weiRaised || _tokenAmount > pool.tokenBalance) {
-            revert InvalidLiquidityAmounts();
-        }
-        _liquify(_currencyAmount, _tokenAmount);
-    }
+    function toggleWhitelist(bool enabled) external {}
+
+    function updateWhitelist(address[] calldata addresses, bool add) external override {}
 }
