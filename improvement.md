@@ -1,23 +1,3 @@
-#### Leftover Token Handling
-
-1. ❌ **Test LeftoverTokenOption Burn**: Set `leftoverTokenOption=1` (burn) and verify leftover tokens are burned (sent to `0x0` or reduced supply).
-2. ❌ **Test LeftoverTokenOption Keep**: Set `leftoverTokenOption=2` (keep in contract) and verify tokens remain in `Presale` contract.
-3. ❌ **Test No Leftover Tokens**: Contribute `hardCap` and set high `liquidityBps` to consume all tokens, verify no leftovers.
-
-#### Whitelist and Merkle Root Tests
-
-1. ❌ **Test Multiple Whitelisted Users**: Add multiple users to Merkle tree and verify contributions succeed with valid proofs.
-2. ❌ **Test Invalid Merkle Proof**: Provide incorrect proof for a whitelisted user (should revert with `NotWhitelisted`).
-3. ❌ **Test Merkle Root Update**: Update Merkle root mid-presale and verify new whitelist applies.
-4. ❌ **Test Non-Whitelisted Presale**: Set empty Merkle root and verify all users can contribute.
-
-#### Security Tests
-
-1. ❌ **Test Reentrancy in Contribute**: Simulate reentrant call in `contribute` (requires mock malicious contract) to ensure protection.
-2. ❌ **Test Reentrancy in Claim**: Simulate reentrant call in `claim` to verify token distribution safety.
-3. ❌ **Test Unauthorized Access**: Attempt `finalize`, `cancel`, or `setMerkleRoot` from non-owner (should revert with `OwnableUnauthorizedAccount`).
-4. ❌ **Test Token Transfer Failure**: Use a mock token that reverts on `transfer` or `transferFrom` to ensure presale handles failures.
-
 #### Gas and Optimization Tests
 
 1. ❌ **Test High Contribution Count**: Simulate 100 users contributing small amounts to stress `_distributeTokens` and gas usage.

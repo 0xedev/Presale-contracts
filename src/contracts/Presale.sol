@@ -198,8 +198,11 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         state = PresaleState.Finalized;
 
         uint256 liquidityAmount = _weiForLiquidity();
-        _liquify(liquidityAmount, tokensLiquidity);
-        tokenBalance -= tokensLiquidity;
+        if (liquidityAmount > 0) {
+            // <-- Add this check
+            _liquify(liquidityAmount, tokensLiquidity);
+            tokenBalance -= tokensLiquidity;
+        }
 
         _distributeHouseFunds();
         ownerBalance = totalRaised - liquidityAmount - ((totalRaised * housePercentage) / BASIS_POINTS);

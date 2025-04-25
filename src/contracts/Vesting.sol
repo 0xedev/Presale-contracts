@@ -5,6 +5,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+// import "forge-std/Test.sol";
+import "forge-std/console.sol";
 
 contract Vesting is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -100,10 +102,20 @@ contract Vesting is AccessControl, ReentrancyGuard {
         VestingSchedule storage schedule = schedules[_presale][msg.sender];
         if (!schedule.exists) revert NoTokensToRelease();
 
-        uint256 releasable = vestedAmount(_presale, msg.sender) - schedule.released;
+        uint256 currentVested = vestedAmount(_presale, msg.sender);
+        uint256 releasable = currentVested - schedule.released;
+        console.log("--- Vesting Release ---");
+        console.log("Timestamp:", block.timestamp);
+        console.log("Presale:", _presale);
+        console.log("Beneficiary:", msg.sender);
+        console.log("Total Vested So Far:", currentVested);
+        console.log("Already Released:", schedule.released);
+        console.log("Calculated Releasable (Delta):", releasable);
+
         if (releasable == 0) revert NoTokensToRelease();
 
         schedule.released += releasable;
+        console.log("Transferring Amount:", releasable);
         IERC20(schedule.tokenAddress).safeTransfer(msg.sender, releasable);
         emit TokensReleased(_presale, msg.sender, schedule.tokenAddress, releasable);
     }
