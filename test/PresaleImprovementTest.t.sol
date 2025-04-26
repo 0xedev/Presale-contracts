@@ -48,7 +48,8 @@ contract MaliciousReceiver {
 
     // Separate function for claim re-entrancy simulation (called by malicious token)
     function onClaimReentryAttempt() external {
-         if (attack && callCount < 1) { // Only re-enter once per claim attempt
+        if (attack && callCount < 1) {
+            // Only re-enter once per claim attempt
             callCount++;
             // Attempt to re-enter claim
             presale.claim();
@@ -69,12 +70,15 @@ contract RevertingToken is MockERC20 {
     function setRevertTransfer(bool _revert) external {
         shouldRevertTransfer = _revert;
     }
-     function setRevertTransferFrom(bool _revert) external {
+
+    function setRevertTransferFrom(bool _revert) external {
         shouldRevertTransferFrom = _revert;
     }
-     function setRevertApprove(bool _revert) external {
+
+    function setRevertApprove(bool _revert) external {
         shouldRevertApprove = _revert;
     }
+
     function setMaliciousClaimer(address _claimer) external {
         maliciousClaimer = MaliciousReceiver(payable(_claimer));
     }
@@ -83,7 +87,7 @@ contract RevertingToken is MockERC20 {
         if (shouldRevertTransfer) revert("RevertingToken: transfer reverted");
         // Simulate callback for claim re-entrancy
         if (address(maliciousClaimer) != address(0) && to == address(maliciousClaimer)) {
-             try maliciousClaimer.onClaimReentryAttempt() {} catch {}
+            try maliciousClaimer.onClaimReentryAttempt() {} catch {}
         }
         return super.transfer(to, amount);
     }
@@ -93,13 +97,12 @@ contract RevertingToken is MockERC20 {
         return super.transferFrom(from, to, amount);
     }
 
-     function approve(address spender, uint256 amount) public override returns (bool) {
+    function approve(address spender, uint256 amount) public override returns (bool) {
         if (shouldRevertApprove) revert("RevertingToken: approve reverted");
         return super.approve(spender, amount);
     }
 }
 // --- End Malicious/Reverting Contracts ---
-
 
 contract PresaleAdditionalTests is Test {
     PresaleFactory factory;
@@ -114,7 +117,7 @@ contract PresaleAdditionalTests is Test {
     address nonOwner = address(0xABCD); // Add nonOwner for tests
     address owner;
 
-        function setUp() public {
+    function setUp() public {
         owner = address(this); // Test contract is owner
         vm.label(owner, "Owner/TestContract");
         vm.label(user, "User");
@@ -131,7 +134,6 @@ contract PresaleAdditionalTests is Test {
         // If it takes no arguments and needs setFactory():
         // router = new MockRouter();
         // router.setFactory(address(mockFactory));
-
 
         // Deploy Factory as owner
         vm.prank(owner);
@@ -157,7 +159,6 @@ contract PresaleAdditionalTests is Test {
         vm.deal(nonOwner, 10 ether);
     }
 
-
     // Helper creates presale, approves token, but DOES NOT deposit
     function _createPresale(
         uint256 leftoverOption,
@@ -173,7 +174,7 @@ contract PresaleAdditionalTests is Test {
             min: 0.1 ether,
             max: 5 ether,
             presaleRate: 1000, // 1 ETH = 1000 TT
-            listingRate: 800,  // 1 ETH = 800 TT
+            listingRate: 800, // 1 ETH = 800 TT
             liquidityBps: liquidityBps,
             slippageBps: 300,
             start: block.timestamp + 1 hours, // Start in 1 hour
@@ -202,37 +203,37 @@ contract PresaleAdditionalTests is Test {
     mapping(address => bytes32[]) proofs;
 
     function _setupWhitelist(address[] memory _whitelistees) internal {
-    require(_whitelistees.length > 0, "Need at least one user");
-    bytes32[] memory leaves = new bytes32[](_whitelistees.length);
-    for (uint i = 0; i < _whitelistees.length; i++) {
-        leaves[i] = keccak256(abi.encodePacked(_whitelistees[i]));
-    }
+        require(_whitelistees.length > 0, "Need at least one user");
+        bytes32[] memory leaves = new bytes32[](_whitelistees.length);
+        for (uint256 i = 0; i < _whitelistees.length; i++) {
+            leaves[i] = keccak256(abi.encodePacked(_whitelistees[i]));
+        }
 
-    // --- Basic Merkle Tree Construction (Example for 2 leaves) ---
-    if (_whitelistees.length == 2) {
-         bytes32 leaf1Hash = leaves[0]; // Already hashed leaf
-         bytes32 leaf2Hash = leaves[1];
-         // Ensure consistent ordering for hashing pairs
-         if (uint256(leaf1Hash) < uint256(leaf2Hash)) {
-              root = keccak256(abi.encodePacked(leaf1Hash, leaf2Hash));
-         } else {
-              root = keccak256(abi.encodePacked(leaf2Hash, leaf1Hash));
-         }
-         // Generate proofs
-         proofs[_whitelistees[0]] = new bytes32[](1);
-         proofs[_whitelistees[0]][0] = leaf2Hash;
-         proofs[_whitelistees[1]] = new bytes32[](1);
-         proofs[_whitelistees[1]][0] = leaf1Hash;
-     } else if (_whitelistees.length == 1) {
-         root = leaves[0]; // Root is just the leaf hash
-         proofs[_whitelistees[0]] = new bytes32[](0); // No proof needed for single leaf
-     } else {
-         // --- Add logic for more leaves or revert ---
-         // This requires a proper recursive tree builder
-         revert("Merkle tree builder for >2 leaves not implemented in helper");
-     }
-    // --- End Basic Construction ---
-}
+        // --- Basic Merkle Tree Construction (Example for 2 leaves) ---
+        if (_whitelistees.length == 2) {
+            bytes32 leaf1Hash = leaves[0]; // Already hashed leaf
+            bytes32 leaf2Hash = leaves[1];
+            // Ensure consistent ordering for hashing pairs
+            if (uint256(leaf1Hash) < uint256(leaf2Hash)) {
+                root = keccak256(abi.encodePacked(leaf1Hash, leaf2Hash));
+            } else {
+                root = keccak256(abi.encodePacked(leaf2Hash, leaf1Hash));
+            }
+            // Generate proofs
+            proofs[_whitelistees[0]] = new bytes32[](1);
+            proofs[_whitelistees[0]][0] = leaf2Hash;
+            proofs[_whitelistees[1]] = new bytes32[](1);
+            proofs[_whitelistees[1]][0] = leaf1Hash;
+        } else if (_whitelistees.length == 1) {
+            root = leaves[0]; // Root is just the leaf hash
+            proofs[_whitelistees[0]] = new bytes32[](0); // No proof needed for single leaf
+        } else {
+            // --- Add logic for more leaves or revert ---
+            // This requires a proper recursive tree builder
+            revert("Merkle tree builder for >2 leaves not implemented in helper");
+        }
+        // --- End Basic Construction ---
+    }
 
     // ============================================
     // ==      Leftover Token Handling Tests     ==
@@ -248,7 +249,7 @@ contract PresaleAdditionalTests is Test {
 
         vm.prank(user);
         presale.contribute{value: 5 ether}(new bytes32[](0));
-        vm.warp(block.timestamp + 1 days + 1 hours +1);
+        vm.warp(block.timestamp + 1 days + 1 hours + 1);
 
         uint256 tokensSold = (5 ether * 1000);
         uint256 currencyForLiquidity = (5 ether * 8000) / 10000;
@@ -262,7 +263,9 @@ contract PresaleAdditionalTests is Test {
         vm.prank(owner);
         presale.finalize();
 
-        assertEq(token.balanceOf(address(0)), balanceBeforeBurn + expectedLeftovers, "Leftover tokens not sent to address(0)");
+        assertEq(
+            token.balanceOf(address(0)), balanceBeforeBurn + expectedLeftovers, "Leftover tokens not sent to address(0)"
+        );
         assertEq(token.balanceOf(address(presale)), 0, "Presale contract should have 0 tokens");
     }
 
@@ -291,13 +294,21 @@ contract PresaleAdditionalTests is Test {
         vm.prank(owner);
         presale.finalize();
 
-        assertEq(vesting.remainingVested(address(presale), owner), expectedLeftovers, "Leftover tokens not vested for owner");
-        assertEq(vesting.vestedAmount(address(presale), owner), 0, "Vested amount should be 0 immediately after finalize");
-        assertEq(token.balanceOf(address(vesting)), vestingBalanceBefore + expectedLeftovers, "Vesting contract balance incorrect");
+        assertEq(
+            vesting.remainingVested(address(presale), owner), expectedLeftovers, "Leftover tokens not vested for owner"
+        );
+        assertEq(
+            vesting.vestedAmount(address(presale), owner), 0, "Vested amount should be 0 immediately after finalize"
+        );
+        assertEq(
+            token.balanceOf(address(vesting)),
+            vestingBalanceBefore + expectedLeftovers,
+            "Vesting contract balance incorrect"
+        );
         assertEq(token.balanceOf(address(presale)), 0, "Presale contract should have 0 tokens");
     }
 
-   function testNoLeftoverTokens() public {
+    function testNoLeftoverTokens() public {
         uint256 hardCap = 10 ether;
         uint256 presaleRate = 1000;
         uint256 listingRate = 800;
@@ -320,7 +331,7 @@ contract PresaleAdditionalTests is Test {
         presale.contribute{value: 5 ether}(new bytes32[](0));
         assertEq(presale.totalRaised(), hardCap);
 
-        vm.warp(block.timestamp + 1 days + 1 hours +1);
+        vm.warp(block.timestamp + 1 days + 1 hours + 1);
 
         uint256 ownerBalanceBefore = token.balanceOf(owner);
         vm.prank(owner);
@@ -342,7 +353,7 @@ contract PresaleAdditionalTests is Test {
     // ==   Whitelist and Merkle Root Tests      ==
     // ============================================
 
-     function testMultipleWhitelistedUsers() public {
+    function testMultipleWhitelistedUsers() public {
         Presale presale = _createPresale(0, 8000, 600_000 ether, 0, 0);
 
         address[] memory whitelistees = new address[](2);
@@ -445,7 +456,7 @@ contract PresaleAdditionalTests is Test {
         // Setup a new whitelist
         address[] memory whitelistees = new address[](1);
         whitelistees[0] = nonOwner;
-         _setupWhitelist(whitelistees);
+        _setupWhitelist(whitelistees);
 
         // Attempt to update root (state is Active)
         vm.prank(owner);
@@ -453,8 +464,7 @@ contract PresaleAdditionalTests is Test {
         presale.setMerkleRoot(root);
     }
 
-
-     function testNonWhitelistedPresale() public {
+    function testNonWhitelistedPresale() public {
         Presale presale = _createPresale(0, 8000, 600_000 ether, 0, 0);
 
         vm.prank(owner);
@@ -472,9 +482,7 @@ contract PresaleAdditionalTests is Test {
     // ==          Security Tests                ==
     // ============================================
 
-  
-
-   function testReentrancyInClaim() public {
+    function testReentrancyInClaim() public {
         RevertingToken badToken = new RevertingToken("Reverting Token", "RVT", 18);
         badToken.mint(owner, 1_000_000 ether);
 
@@ -552,8 +560,6 @@ contract PresaleAdditionalTests is Test {
         presale.cancel();
     }
 
-   
-
     // Test transferFrom failure on deposit
     function testTokenTransferFailureOnDeposit() public {
         RevertingToken badToken = new RevertingToken("Bad Token", "BT", 18);
@@ -579,7 +585,6 @@ contract PresaleAdditionalTests is Test {
             currency: address(0)
         });
 
-        
         vm.prank(owner);
         address presaleAddr = factory.createPresale(opts, address(badToken), weth, address(router));
         Presale presale = Presale(payable(presaleAddr)); // Reassign presale variable
@@ -604,11 +609,22 @@ contract PresaleAdditionalTests is Test {
 
         // Create presale with badToken address
         Presale.PresaleOptions memory opts = Presale.PresaleOptions({
-            tokenDeposit: 600_000 ether, hardCap: 10 ether, softCap: 5 ether, min: 0.1 ether, max: 5 ether,
-            presaleRate: 1000, listingRate: 800, liquidityBps: 8000, slippageBps: 300,
-            start: block.timestamp + 1 hours, end: block.timestamp + 1 days + 1 hours,
-            lockupDuration: 30 days, vestingPercentage: 0, vestingDuration: 0, // No vesting
-            leftoverTokenOption: 0, currency: address(0)
+            tokenDeposit: 600_000 ether,
+            hardCap: 10 ether,
+            softCap: 5 ether,
+            min: 0.1 ether,
+            max: 5 ether,
+            presaleRate: 1000,
+            listingRate: 800,
+            liquidityBps: 8000,
+            slippageBps: 300,
+            start: block.timestamp + 1 hours,
+            end: block.timestamp + 1 days + 1 hours,
+            lockupDuration: 30 days,
+            vestingPercentage: 0,
+            vestingDuration: 0, // No vesting
+            leftoverTokenOption: 0,
+            currency: address(0)
         });
         vm.prank(owner);
         address presaleAddr = factory.createPresale(opts, address(badToken), weth, address(router));
@@ -619,7 +635,7 @@ contract PresaleAdditionalTests is Test {
         badToken.approve(address(presale), opts.tokenDeposit);
         vm.prank(owner);
         presale.deposit();
-        vm.warp(opts.start + 1); // Warp to active state        
+        vm.warp(opts.start + 1); // Warp to active state
 
         vm.prank(user);
         presale.contribute{value: 3 ether}(new bytes32[](0));
@@ -639,18 +655,28 @@ contract PresaleAdditionalTests is Test {
     }
 
     // Test transferFrom failure during liquify
-     function testTokenTransferFailureOnLiquify() public {
+    function testTokenTransferFailureOnLiquify() public {
         RevertingToken badToken = new RevertingToken("Bad Token", "BT", 18);
         badToken.mint(address(this), 1_000_000 ether);
 
         // Create presale with badToken address
         Presale.PresaleOptions memory opts = Presale.PresaleOptions({
-            tokenDeposit: 600_000 ether, hardCap: 10 ether, softCap: 5 ether, min: 0.1 ether, max: 5 ether,
-            presaleRate: 1000, listingRate: 800, liquidityBps: 8000, // Ensure liquidity is attempted
+            tokenDeposit: 600_000 ether,
+            hardCap: 10 ether,
+            softCap: 5 ether,
+            min: 0.1 ether,
+            max: 5 ether,
+            presaleRate: 1000,
+            listingRate: 800,
+            liquidityBps: 8000, // Ensure liquidity is attempted
             slippageBps: 300,
-            start: block.timestamp + 1 hours, end: block.timestamp + 1 days + 1 hours,
-            lockupDuration: 30 days, vestingPercentage: 0, vestingDuration: 0,
-            leftoverTokenOption: 0, currency: address(0)
+            start: block.timestamp + 1 hours,
+            end: block.timestamp + 1 days + 1 hours,
+            lockupDuration: 30 days,
+            vestingPercentage: 0,
+            vestingDuration: 0,
+            leftoverTokenOption: 0,
+            currency: address(0)
         });
         vm.prank(owner);
         address presaleAddr = factory.createPresale(opts, address(badToken), weth, address(router));
@@ -661,14 +687,13 @@ contract PresaleAdditionalTests is Test {
         badToken.approve(address(presale), opts.tokenDeposit);
         vm.prank(owner);
         presale.deposit();
-        vm.warp(opts.start + 1); // Warp to active state        
+        vm.warp(opts.start + 1); // Warp to active state
 
         vm.prank(user);
         presale.contribute{value: 5 ether}(new bytes32[](0)); // Reach hardcap
 
         vm.prank(user2);
         presale.contribute{value: 5 ether}(new bytes32[](0)); // Reach hardcap
-
 
         vm.warp(opts.end + 1);
 
@@ -677,24 +702,36 @@ contract PresaleAdditionalTests is Test {
 
         // Expect finalize to fail inside _addLiquidityETH -> router call
         // The exact revert depends on the try/catch in Presale._addLiquidityETH
-       vm.expectRevert(abi.encodeWithSelector(IPresale.LiquificationFailedReason.selector, "RevertingToken: transferFrom reverted"));
+        vm.expectRevert(
+            abi.encodeWithSelector(IPresale.LiquificationFailedReason.selector, "RevertingToken: transferFrom reverted")
+        );
         vm.prank(owner);
         presale.finalize();
     }
 
     // Test approve failure during liquify
-     function testTokenApproveFailureOnLiquify() public {
+    function testTokenApproveFailureOnLiquify() public {
         RevertingToken badToken = new RevertingToken("Bad Token", "BT", 18);
         badToken.mint(address(this), 1_000_000 ether);
 
         // Create presale with badToken address
         Presale.PresaleOptions memory opts = Presale.PresaleOptions({
-            tokenDeposit: 600_000 ether, hardCap: 10 ether, softCap: 5 ether, min: 0.1 ether, max: 5 ether,
-            presaleRate: 1000, listingRate: 800, liquidityBps: 8000, // Ensure liquidity is attempted
+            tokenDeposit: 600_000 ether,
+            hardCap: 10 ether,
+            softCap: 5 ether,
+            min: 0.1 ether,
+            max: 5 ether,
+            presaleRate: 1000,
+            listingRate: 800,
+            liquidityBps: 8000, // Ensure liquidity is attempted
             slippageBps: 300,
-            start: block.timestamp + 1 hours, end: block.timestamp + 1 days + 1 hours,
-            lockupDuration: 30 days, vestingPercentage: 0, vestingDuration: 0,
-            leftoverTokenOption: 0, currency: address(0)
+            start: block.timestamp + 1 hours,
+            end: block.timestamp + 1 days + 1 hours,
+            lockupDuration: 30 days,
+            vestingPercentage: 0,
+            vestingDuration: 0,
+            leftoverTokenOption: 0,
+            currency: address(0)
         });
         vm.prank(owner);
         address presaleAddr = factory.createPresale(opts, address(badToken), weth, address(router));
@@ -705,12 +742,12 @@ contract PresaleAdditionalTests is Test {
         badToken.approve(address(presale), opts.tokenDeposit); // Initial approve works
         vm.prank(owner);
         presale.deposit();
-        vm.warp(opts.start + 1); // Warp to active state        
+        vm.warp(opts.start + 1); // Warp to active state
 
         vm.prank(user);
         presale.contribute{value: 5 ether}(new bytes32[](0)); // Reach hardcap
         vm.prank(user2);
-        presale.contribute{value: 5 ether}(new bytes32[](0)); 
+        presale.contribute{value: 5 ether}(new bytes32[](0));
         vm.warp(opts.end + 1);
 
         // Configure token to revert on approve (needed before router.addLiquidityETH)
@@ -721,5 +758,4 @@ contract PresaleAdditionalTests is Test {
         vm.prank(owner);
         presale.finalize();
     }
-
 }

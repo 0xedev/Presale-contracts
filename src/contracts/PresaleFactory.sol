@@ -35,6 +35,9 @@ contract PresaleFactory is Ownable {
     bytes32 public constant VESTER_ROLE = keccak256("VESTER_ROLE");
     bytes32 public constant LOCKER_ROLE = keccak256("LOCKER_ROLE");
 
+    address[] public createdPresales; // Track all presale contracts created by this factory
+    
+
     // --- Events ---
 
     event PresaleCreated(
@@ -49,6 +52,7 @@ contract PresaleFactory is Ownable {
     error InvalidHouseConfiguration();
     error RoleGrantFailed();
     error ZeroAddress();
+    error IndexOutOfBounds();
 
     // --- Constructor ---
     constructor(
@@ -103,7 +107,7 @@ contract PresaleFactory is Ownable {
                 if (msg.value < creationFee) revert FeePaymentFailed();
                 // Forward excess ETH if any? Or require exact amount. Assuming require exact for now.
                 if (msg.value > creationFee) {
-                    payable(owner()).transfer(msg.value - creationFee); // Return excess
+                    payable(msg.sender).transfer(msg.value - creationFee); // Return excess
                 }
                 // Note: The actual creationFee amount stays with the factory temporarily
                 // and can be withdrawn by the owner using withdrawFees().
@@ -141,7 +145,7 @@ contract PresaleFactory is Ownable {
         catch {
             revert RoleGrantFailed();
         }
-
+         createdPresales.push(presaleAddress);
         // 4. Emit Factory-level event (optional, as Presale constructor also emits)
         emit PresaleCreated(msg.sender, presaleAddress, _token, _options.start, _options.end);
 
@@ -178,4 +182,29 @@ contract PresaleFactory is Ownable {
         (bool success,) = owner().call{value: balance}(""); // Use call for safer transfer
         require(success, "ETH fee withdrawal failed");
     }
+
+
+    // --- View Functions ---
+   
+    function getCreationFee () external view returns (uint256) {
+        return creationFee;
+    }
+    function getHousePercentage () external view returns (uint256) {
+        return housePercentage;
+    }
+    function getHouseAddress () external view returns (address) {
+        return houseAddress;
+    }
+    function getPresaleCount () external view returns (uint256) {
+        return createdPresales.length;
+    }
+    function getPresaleAt (uint256 index) external view returns (address) {
+    if (index >= createdPresales.length) revert IndexOutOfBounds(); // Use custom error
+    return createdPresales[index];
+}
+
+    function getAllPresales () external view returns (address[] memory) {
+        return createdPresales;
+    }
+    
 }
