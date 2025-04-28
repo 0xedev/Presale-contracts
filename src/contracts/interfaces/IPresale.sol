@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Presale} from "../Presale.sol";
+
 /**
  * This interface outlines the functions related to managing and interacting
  * with presale contracts. It includes capabilities such as depositing funds,
@@ -128,8 +130,9 @@ interface IPresale {
     function rescueTokens(address _erc20Token, address _to, uint256 _amount) external; // Added missing definition
     function toggleWhitelist(bool enabled) external; // Added missing definition
     function setMerkleRoot(bytes32 _merkleRoot) external; // Added missing definition
-    function extendClaimDeadline(uint256 _newDeadline) external; // Added missing definition
+    function extendClaimDeadline(uint256 _newDeadline) external;
     function contributeStablecoin(uint256 _amount, bytes32[] calldata _merkleProof) external; // Added missing definition
+    function getOptions() external view returns (Presale.PresaleOptions memory); // Added missing definition
 
     // Note: contribute(bytes32[]) payable and receive() payable are implicitly part of the interface
     // if the implementing contract defines them as public/external payable.

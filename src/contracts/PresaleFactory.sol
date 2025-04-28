@@ -36,13 +36,17 @@ contract PresaleFactory is Ownable {
     bytes32 public constant LOCKER_ROLE = keccak256("LOCKER_ROLE");
 
     address[] public createdPresales; // Track all presale contracts created by this factory
-    
+    mapping(address => Presale.PresaleOptions) public presaleConfigurations; // Store configurations for each presale
 
     // --- Events ---
 
     event PresaleCreated(
         address indexed creator, address indexed presaleContract, address indexed token, uint256 start, uint256 end
-    ); // Re-declared here for factory-level emission if desired
+    ); 
+
+    event PresaleConfiguration(                 
+        Presale.PresaleOptions indexed options
+    );
 
     event FeeConfigurationChanged(uint256 newCreationFee, address newFeeToken);
 
@@ -53,6 +57,7 @@ contract PresaleFactory is Ownable {
     error RoleGrantFailed();
     error ZeroAddress();
     error IndexOutOfBounds();
+    error NotAPresaleContract();
 
     // --- Constructor ---
     constructor(
@@ -148,7 +153,9 @@ contract PresaleFactory is Ownable {
          createdPresales.push(presaleAddress);
         // 4. Emit Factory-level event (optional, as Presale constructor also emits)
         emit PresaleCreated(msg.sender, presaleAddress, _token, _options.start, _options.end);
-
+        emit PresaleConfiguration(
+            _options
+        );
         return presaleAddress;
     }
 
@@ -206,5 +213,28 @@ contract PresaleFactory is Ownable {
     function getAllPresales () external view returns (address[] memory) {
         return createdPresales;
     }
+    function getPresaleOptionsByAddress(address _presaleAddress)
+        external
+        view
+        returns (Presale.PresaleOptions memory options)
+    {
+        // Basic check: Ensure the address is a contract
+        uint32 size;
+        assembly { size := extcodesize(_presaleAddress) }
+        if (size == 0) revert NotAPresaleContract();
+
+        // Call the getOptions function on the target Presale contract
+        // This requires Presale.sol to have a public/external view function getOptions()
+        // and IPresale interface to declare it.
+        try IPresale(_presaleAddress).getOptions() returns (Presale.PresaleOptions memory _options) {
+            return _options;
+        } catch {
+            // Handle cases where the call fails (e.g., address is not a Presale contract
+            // or doesn't implement getOptions correctly)
+            revert NotAPresaleContract(); // Or a more specific error
+        }
+    }
+
+   
     
 }

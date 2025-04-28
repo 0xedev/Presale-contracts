@@ -41,3 +41,5 @@
 - [ ] House percentage of 0 or 5000.
 - [ ] Liquidity BPS boundary values (5000, 10000).
 - [ ] Multiple presales with different house percentages (updated via factory).
+
+forge script script/DeployPresale.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY -vvvv
