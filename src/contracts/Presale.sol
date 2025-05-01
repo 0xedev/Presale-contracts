@@ -86,14 +86,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     address[] public contributors;
     bytes32 public merkleRoot;
 
-    uint256[] private ALLOWED_LIQUIDITY_BPS = [
-        5000,
-        6000,
-        7000,
-        8000,
-        9000,
-        10000
-    ];
+    uint256[] private ALLOWED_LIQUIDITY_BPS = [5000, 6000, 7000, 8000, 9000, 10000];
 
     ERC20 public immutable token;
     IUniswapV2Router02 public immutable uniswapV2Router02;
@@ -109,12 +102,17 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         _;
     }
 
+    modifier onlyFactory() {
+        if (msg.sender != factory) revert NotFactory();
+        _;
+    }
+
     modifier onlyRefundable() {
         if (
-            !(state == PresaleState.Canceled ||
-                (state == PresaleState.Active &&
-                    block.timestamp > options.end &&
-                    totalRaised < options.softCap))
+            !(
+                state == PresaleState.Canceled
+                    || (state == PresaleState.Active && block.timestamp > options.end && totalRaised < options.softCap)
+            )
         ) {
             revert NotRefundable();
         }
@@ -132,48 +130,35 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         uint256 _housePercentage,
         address _houseAddress
     ) Ownable(_creator) {
-        if (
-            _weth == address(0) ||
-            _token == address(0) ||
-            _uniswapV2Router02 == address(0)
-        ) {
+        if (_weth == address(0) || _token == address(0) || _uniswapV2Router02 == address(0)) {
             revert InvalidInitialization();
         }
-        if (_liquidityLocker == address(0) || _vestingContract == address(0))
+        if (_liquidityLocker == address(0) || _vestingContract == address(0)) {
             revert InvalidInitialization();
-        if (_options.leftoverTokenOption > 2)
+        }
+        if (_options.leftoverTokenOption > 2) {
             revert InvalidLeftoverTokenOption();
+        }
         if (_housePercentage > 500) revert InvalidHouseConfiguration();
-        if (_houseAddress == address(0) && _housePercentage > 0)
+        if (_houseAddress == address(0) && _housePercentage > 0) {
             revert InvalidHouseConfiguration();
+        }
 
-        if (
-            _options.hardCap == 0 ||
-            _options.softCap == 0 ||
-            _options.softCap > _options.hardCap
-        ) {
+        if (_options.hardCap == 0 || _options.softCap == 0 || _options.softCap > _options.hardCap) {
             revert InvalidCapSettings();
         }
-        if (
-            _options.max == 0 ||
-            _options.min == 0 ||
-            _options.min > _options.max ||
-            _options.max > _options.hardCap
-        ) {
+        if (_options.max == 0 || _options.min == 0 || _options.min > _options.max || _options.max > _options.hardCap) {
             revert InvalidContributionLimits();
         }
-        if (
-            _options.presaleRate == 0 ||
-            _options.listingRate == 0 ||
-            _options.listingRate >= _options.presaleRate
-        ) {
+        if (_options.presaleRate == 0 || _options.listingRate == 0 || _options.listingRate >= _options.presaleRate) {
             revert InvalidRates();
         }
-        if (_options.start < block.timestamp || _options.end <= _options.start)
+        if (_options.start < block.timestamp || _options.end <= _options.start) {
             revert InvalidTimestamps();
+        }
         if (
-            _options.vestingPercentage > BASIS_POINTS ||
-            (_options.vestingPercentage > 0 && _options.vestingDuration == 0)
+            _options.vestingPercentage > BASIS_POINTS
+                || (_options.vestingPercentage > 0 && _options.vestingDuration == 0)
         ) revert InvalidVestingPercentage();
 
         weth = _weth;
@@ -187,13 +172,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         options = _options;
         state = PresaleState.Pending;
 
-        emit PresaleCreated(
-            _creator,
-            address(this),
-            _token,
-            _options.start,
-            _options.end
-        );
+        emit PresaleCreated(_creator, address(this), _token, _options.start, _options.end);
     }
 
     function setMerkleRoot(bytes32 _merkleRoot) external onlyOwner {
@@ -203,7 +182,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         emit MerkleRootUpdated(_merkleRoot);
     }
 
-    function deposit() external onlyOwner whenNotPaused returns (uint256) {
+    function deposit() external onlyFactory whenNotPaused returns (uint256) {
         if (state != PresaleState.Pending) revert InvalidState(uint8(state));
 
         uint256 amount = options.tokenDeposit;
@@ -224,13 +203,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         return amount;
     }
 
-    function finalize()
-        external
-        onlyOwner
-        whenNotPaused
-        nonReentrant
-        returns (bool)
-    {
+    function finalize() external onlyOwner whenNotPaused nonReentrant returns (bool) {
         if (state != PresaleState.Active) revert InvalidState(uint8(state));
         if (block.timestamp <= options.end) revert PresaleNotEnded();
         if (totalRaised < options.softCap) revert SoftCapNotReached();
@@ -245,10 +218,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         }
 
         _distributeHouseFunds();
-        ownerBalance =
-            totalRaised -
-            liquidityAmount -
-            ((totalRaised * housePercentage) / BASIS_POINTS);
+        ownerBalance = totalRaised - liquidityAmount - ((totalRaised * housePercentage) / BASIS_POINTS);
         claimDeadline = block.timestamp + 180 days;
 
         _handleLeftoverTokens();
@@ -257,13 +227,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         return true;
     }
 
-    function cancel()
-        external
-        nonReentrant
-        onlyOwner
-        whenNotPaused
-        returns (bool)
-    {
+    function cancel() external nonReentrant onlyOwner whenNotPaused returns (bool) {
         if (state != PresaleState.Pending && state != PresaleState.Active) {
             revert InvalidState(uint8(state));
         }
@@ -297,19 +261,14 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         emit ClaimDeadlineExtended(_newDeadline);
     }
 
-    function rescueTokens(
-        address _erc20Token,
-        address _to,
-        uint256 _amount
-    ) external onlyOwner {
+    function rescueTokens(address _erc20Token, address _to, uint256 _amount) external onlyOwner {
         if (_to == address(0)) revert InvalidAddress();
         if (state != PresaleState.Finalized && state != PresaleState.Canceled) {
             revert CannotRescueBeforeFinalizationOrCancellation();
         }
         if (
-            state == PresaleState.Finalized &&
-            address(_erc20Token) == address(token) &&
-            block.timestamp <= claimDeadline
+            state == PresaleState.Finalized && address(_erc20Token) == address(token)
+                && block.timestamp <= claimDeadline
         ) {
             revert CannotRescuePresaleTokens();
         }
@@ -329,9 +288,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         emit Unpaused(msg.sender);
     }
 
-    function contribute(
-        bytes32[] calldata _merkleProof
-    ) external payable whenNotPaused nonReentrant {
+    function contribute(bytes32[] calldata _merkleProof) external payable whenNotPaused nonReentrant {
         _contribute(msg.sender, msg.value, _merkleProof);
     }
 
@@ -340,18 +297,15 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         _contribute(msg.sender, msg.value, emptyProof);
     }
 
-    function contributeStablecoin(
-        uint256 _amount,
-        bytes32[] calldata _merkleProof
-    ) external whenNotPaused nonReentrant {
+    function contributeStablecoin(uint256 _amount, bytes32[] calldata _merkleProof)
+        external
+        whenNotPaused
+        nonReentrant
+    {
         if (options.currency == address(0)) revert StablecoinNotAccepted();
         if (_amount == 0) revert ZeroAmount();
 
-        IERC20(options.currency).safeTransferFrom(
-            msg.sender,
-            address(this),
-            _amount
-        );
+        IERC20(options.currency).safeTransferFrom(msg.sender, address(this), _amount);
         _contribute(msg.sender, _amount, _merkleProof);
     }
 
@@ -387,11 +341,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         return amount;
     }
 
-    function _contribute(
-        address _contributor,
-        uint256 _amount,
-        bytes32[] memory _merkleProof
-    ) private {
+    function _contribute(address _contributor, uint256 _amount, bytes32[] memory _merkleProof) private {
         if (state != PresaleState.Active) revert InvalidState(uint8(state));
         if (block.timestamp < options.start || block.timestamp > options.end) {
             revert NotInPurchasePeriod();
@@ -399,20 +349,13 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         if (_contributor == address(0)) revert InvalidContributorAddress();
 
         if (
-            whitelistEnabled &&
-            !MerkleProof.verify(
-                _merkleProof,
-                merkleRoot,
-                keccak256(abi.encodePacked(_contributor))
-            )
+            whitelistEnabled && !MerkleProof.verify(_merkleProof, merkleRoot, keccak256(abi.encodePacked(_contributor)))
         ) {
             revert NotWhitelisted();
         }
 
         _validateCurrencyAndAmount(_contributor, _amount);
-        uint256 contributionAmount = (options.currency == address(0))
-            ? msg.value
-            : _amount;
+        uint256 contributionAmount = (options.currency == address(0)) ? msg.value : _amount;
 
         totalRaised += contributionAmount;
         totalRefundable += contributionAmount;
@@ -423,31 +366,22 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         contributions[_contributor] += contributionAmount;
 
         emit Purchase(_contributor, contributionAmount);
-        emit Contribution(
-            _contributor,
-            contributionAmount,
-            options.currency == address(0)
-        );
+        emit Contribution(_contributor, contributionAmount, options.currency == address(0));
     }
 
     function _handleLeftoverTokens() private {
         LeftoverTokenParams memory params;
-        params.tokensSold =
-            (totalRaised * options.presaleRate * 10 ** token.decimals()) /
-            _getCurrencyMultiplier();
+        params.tokensSold = (totalRaised * options.presaleRate * 10 ** token.decimals()) / _getCurrencyMultiplier();
         if (params.tokensSold > tokensClaimable) {
             params.tokensSold = tokensClaimable;
         }
 
         params.unsoldPresaleTokens = tokensClaimable - params.tokensSold;
         uint256 totalTokensNeededAtDeposit = tokensClaimable + tokensLiquidity;
-        params.excessDeposit = (tokenBalance + tokensLiquidity >
-            totalTokensNeededAtDeposit)
+        params.excessDeposit = (tokenBalance + tokensLiquidity > totalTokensNeededAtDeposit)
             ? (tokenBalance + tokensLiquidity - totalTokensNeededAtDeposit)
             : 0;
-        params.totalLeftover =
-            params.unsoldPresaleTokens +
-            params.excessDeposit;
+        params.totalLeftover = params.unsoldPresaleTokens + params.excessDeposit;
         if (params.totalLeftover > tokenBalance) {
             params.totalLeftover = tokenBalance;
         }
@@ -462,33 +396,23 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
             IERC20(token).safeTransfer(address(0), params.totalLeftover);
             emit LeftoverTokensBurned(params.totalLeftover);
         } else {
-            IERC20(token).approve(
-                address(vestingContract),
-                params.totalLeftover
-            );
+            IERC20(token).approve(address(vestingContract), params.totalLeftover);
             vestingContract.createVesting(
-                address(this),
-                owner(),
-                address(token),
-                params.totalLeftover,
-                block.timestamp,
-                options.vestingDuration
+                address(this), owner(), address(token), params.totalLeftover, block.timestamp, options.vestingDuration
             );
             emit LeftoverTokensVested(params.totalLeftover, owner());
         }
     }
 
     function _liquify(uint256 _currencyAmount, uint256 _tokenAmount) private {
-        if (_currencyAmount == 0 || _tokenAmount == 0)
+        if (_currencyAmount == 0 || _tokenAmount == 0) {
             revert ZeroLiquidityAmounts();
+        }
 
         LiquidityParams memory params;
         params.currencyAmount = _currencyAmount;
         params.tokenAmount = _tokenAmount;
-        (params.minToken, params.minCurrency) = _calculateMinAmounts(
-            _tokenAmount,
-            _currencyAmount
-        );
+        (params.minToken, params.minCurrency) = _calculateMinAmounts(_tokenAmount, _currencyAmount);
         params.pair = _getOrCreatePair();
 
         IERC20(token).approve(address(uniswapV2Router02), params.tokenAmount);
@@ -496,38 +420,26 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         _addLiquidityETH(params);
         IERC20(token).approve(address(uniswapV2Router02), 0);
 
-        params.lpAmount =
-            IERC20(params.pair).balanceOf(address(this)) -
-            lpAmountBefore;
+        params.lpAmount = IERC20(params.pair).balanceOf(address(this)) - lpAmountBefore;
         if (params.lpAmount == 0) revert LiquificationYieldedZeroLP();
 
         _lockLiquidity(params.pair, params.lpAmount);
     }
 
-    function _calculateMinAmounts(
-        uint256 _tokenAmount,
-        uint256 _currencyAmount
-    ) private view returns (uint256 minToken, uint256 minCurrency) {
-        minToken =
-            (_tokenAmount * (BASIS_POINTS - options.slippageBps)) /
-            BASIS_POINTS;
-        minCurrency =
-            (_currencyAmount * (BASIS_POINTS - options.slippageBps)) /
-            BASIS_POINTS;
+    function _calculateMinAmounts(uint256 _tokenAmount, uint256 _currencyAmount)
+        private
+        view
+        returns (uint256 minToken, uint256 minCurrency)
+    {
+        minToken = (_tokenAmount * (BASIS_POINTS - options.slippageBps)) / BASIS_POINTS;
+        minCurrency = (_currencyAmount * (BASIS_POINTS - options.slippageBps)) / BASIS_POINTS;
     }
 
     function _getOrCreatePair() private returns (address pair) {
-        address pairCurrency = (options.currency == address(0))
-            ? weth
-            : options.currency;
+        address pairCurrency = (options.currency == address(0)) ? weth : options.currency;
         pair = IUniswapV2Factory(factory).getPair(address(token), pairCurrency);
         if (pair == address(0)) {
-            try
-                IUniswapV2Factory(factory).createPair(
-                    address(token),
-                    pairCurrency
-                )
-            returns (address newPair) {
+            try IUniswapV2Factory(factory).createPair(address(token), pairCurrency) returns (address newPair) {
                 pair = newPair;
             } catch {
                 revert PairCreationFailed(address(token), pairCurrency);
@@ -537,16 +449,14 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     }
 
     function _addLiquidityETH(LiquidityParams memory params) private {
-        try
-            uniswapV2Router02.addLiquidityETH{value: params.currencyAmount}(
-                address(token),
-                params.tokenAmount,
-                params.minToken,
-                params.minCurrency,
-                address(this),
-                block.timestamp + 600
-            )
-        {} catch Error(string memory reason) {
+        try uniswapV2Router02.addLiquidityETH{value: params.currencyAmount}(
+            address(token),
+            params.tokenAmount,
+            params.minToken,
+            params.minCurrency,
+            address(this),
+            block.timestamp + 600
+        ) {} catch Error(string memory reason) {
             revert LiquificationFailedReason(reason);
         } catch {
             revert LiquificationFailed();
@@ -556,9 +466,8 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     function _lockLiquidity(address _pair, uint256 _lpAmount) private {
         uint256 unlockTime = block.timestamp + options.lockupDuration;
         IERC20(_pair).approve(address(liquidityLocker), _lpAmount);
-        try
-            liquidityLocker.lock(_pair, _lpAmount, unlockTime, owner())
-        {} catch Error(string memory reason) {
+        try liquidityLocker.lock(_pair, _lpAmount, unlockTime, owner()) {}
+        catch Error(string memory reason) {
             revert LPLockFailedReason(reason);
         } catch {
             revert LPLockFailed();
@@ -574,29 +483,21 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         }
     }
 
-    function _calculateLeftoverTokens(
-        uint256 _tokensSold
-    ) private view returns (uint256) {
+    function _calculateLeftoverTokens(uint256 _tokensSold) private view returns (uint256) {
         uint256 unsoldPresaleTokens = tokensClaimable - _tokensSold;
         uint256 totalTokensNeededAtDeposit = tokensClaimable + tokensLiquidity;
-        uint256 excessDeposit = (tokenBalance + tokensLiquidity >
-            totalTokensNeededAtDeposit)
+        uint256 excessDeposit = (tokenBalance + tokensLiquidity > totalTokensNeededAtDeposit)
             ? (tokenBalance + tokensLiquidity - totalTokensNeededAtDeposit)
             : 0;
         uint256 totalLeftover = unsoldPresaleTokens + excessDeposit;
         return tokenBalance < totalLeftover ? tokenBalance : totalLeftover;
     }
 
-    function _distributeTokens(
-        address _recipient,
-        uint256 _totalTokens
-    ) private {
+    function _distributeTokens(address _recipient, uint256 _totalTokens) private {
         TokenDistributionParams memory params;
         params.totalTokens = _totalTokens;
         params.vestingBps = options.vestingPercentage;
-        params.vestedTokens = (params.vestingBps > 0)
-            ? (params.totalTokens * params.vestingBps) / BASIS_POINTS
-            : 0;
+        params.vestedTokens = (params.vestingBps > 0) ? (params.totalTokens * params.vestingBps) / BASIS_POINTS : 0;
         params.immediateTokens = params.totalTokens - params.vestedTokens;
 
         if (params.immediateTokens > 0) {
@@ -604,25 +505,14 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         }
 
         if (params.vestedTokens > 0) {
-            IERC20(token).approve(
-                address(vestingContract),
-                params.vestedTokens
-            );
+            IERC20(token).approve(address(vestingContract), params.vestedTokens);
             vestingContract.createVesting(
-                address(this),
-                _recipient,
-                address(token),
-                params.vestedTokens,
-                block.timestamp,
-                options.vestingDuration
+                address(this), _recipient, address(token), params.vestedTokens, block.timestamp, options.vestingDuration
             );
         }
     }
 
-    function _validateCurrencyAndAmount(
-        address _contributor,
-        uint256 _amount
-    ) private view {
+    function _validateCurrencyAndAmount(address _contributor, uint256 _amount) private view {
         if (options.currency == address(0)) {
             if (msg.value == 0) revert ZeroAmount();
         } else {
@@ -632,18 +522,14 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         _validateContribution(_contributor, _amount);
     }
 
-    function _validateContribution(
-        address _contributor,
-        uint256 _stablecoinAmountIfAny
-    ) private view {
-        uint256 amount = (options.currency == address(0))
-            ? msg.value
-            : _stablecoinAmountIfAny;
+    function _validateContribution(address _contributor, uint256 _stablecoinAmountIfAny) private view {
+        uint256 amount = (options.currency == address(0)) ? msg.value : _stablecoinAmountIfAny;
         if (totalRaised + amount > options.hardCap) revert HardCapExceeded();
 
         if (amount < options.min) revert BelowMinimumContribution();
-        if (contributions[_contributor] + amount > options.max)
+        if (contributions[_contributor] + amount > options.max) {
             revert ExceedsMaximumContribution();
+        }
     }
 
     function calculateTotalTokensNeeded() external view returns (uint256) {
@@ -660,9 +546,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     function userTokens(address _contributor) public view returns (uint256) {
         uint256 contribution = contributions[_contributor];
         if (contribution == 0) return 0;
-        return
-            (contribution * options.presaleRate * 10 ** token.decimals()) /
-            _getCurrencyMultiplier();
+        return (contribution * options.presaleRate * 10 ** token.decimals()) / _getCurrencyMultiplier();
     }
 
     function getContributorCount() external view returns (uint256) {
@@ -677,9 +561,7 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         return totalRaised;
     }
 
-    function getContribution(
-        address _contributor
-    ) external view returns (uint256) {
+    function getContribution(address _contributor) external view returns (uint256) {
         return contributions[_contributor];
     }
 
@@ -704,18 +586,12 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
     }
 
     function _tokensForPresale() private view returns (uint256) {
-        return
-            (options.hardCap * options.presaleRate * 10 ** token.decimals()) /
-            _getCurrencyMultiplier();
+        return (options.hardCap * options.presaleRate * 10 ** token.decimals()) / _getCurrencyMultiplier();
     }
 
     function _tokensForLiquidity() private view returns (uint256) {
-        uint256 currencyForLiquidity = (options.hardCap *
-            options.liquidityBps) / BASIS_POINTS;
-        return
-            (currencyForLiquidity *
-                options.listingRate *
-                10 ** token.decimals()) / _getCurrencyMultiplier();
+        uint256 currencyForLiquidity = (options.hardCap * options.liquidityBps) / BASIS_POINTS;
+        return (currencyForLiquidity * options.listingRate * 10 ** token.decimals()) / _getCurrencyMultiplier();
     }
 
     function _weiForLiquidity() private view returns (uint256) {
@@ -724,19 +600,33 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
 
     function toggleWhitelist(bool enabled) external {}
 
-    function updateWhitelist(
-        address[] calldata addresses,
-        bool add
-    ) external override {}
+    function updateWhitelist(address[] calldata addresses, bool add) external override {}
 
     function getPresaleOptions() external view returns (PresaleOptions memory) {
         return options;
     }
 
-    function getOptions()
-        external
-        view
-        override
-        returns (Presale.PresaleOptions memory)
-    {}
+    function getOptions() external view override returns (Presale.PresaleOptions memory) {}
+
+    function initializeDeposit(uint256 _amount) external onlyFactory whenNotPaused returns (uint256) {
+        if (state != PresaleState.Pending) revert InvalidState(uint8(state));
+        if (_amount == 0) revert ZeroAmount();
+        if (block.timestamp >= options.start) revert NotInPurchasePeriod();
+
+        IERC20(token).safeTransferFrom(msg.sender, address(this), _amount);
+
+        tokensClaimable = _tokensForPresale();
+        tokensLiquidity = _tokensForLiquidity();
+        uint256 totalTokensNeeded = tokensClaimable + tokensLiquidity;
+
+        if (_amount < totalTokensNeeded) {
+            revert InsufficientTokenDeposit(_amount, totalTokensNeeded);
+        }
+
+        tokenBalance = _amount;
+        state = PresaleState.Active;
+
+        emit Deposit(msg.sender, _amount, block.timestamp);
+        return _amount;
+    }
 }

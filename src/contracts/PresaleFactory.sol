@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 // --- Imports ---
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol"; // Assuming Vesting/Locker use this
 
@@ -42,11 +43,9 @@ contract PresaleFactory is Ownable {
 
     event PresaleCreated(
         address indexed creator, address indexed presaleContract, address indexed token, uint256 start, uint256 end
-    ); 
-
-    event PresaleConfiguration(                 
-        Presale.PresaleOptions indexed options
     );
+
+    event PresaleConfiguration(Presale.PresaleOptions indexed options);
 
     event FeeConfigurationChanged(uint256 newCreationFee, address newFeeToken);
 
@@ -58,6 +57,8 @@ contract PresaleFactory is Ownable {
     error ZeroAddress();
     error IndexOutOfBounds();
     error NotAPresaleContract();
+    error InvalidCapSettings();
+    error InvalidCurrencyDecimals();
 
     // --- Constructor ---
     constructor(
@@ -140,6 +141,10 @@ contract PresaleFactory is Ownable {
 
         presaleAddress = address(newPresale);
 
+        // Transfer presale tokens to the presale contract
+        IERC20(_token).safeTransferFrom(msg.sender, presaleAddress, _options.tokenDeposit);
+        newPresale.initializeDeposit(_options.tokenDeposit);
+
         // 3. Grant Roles to the new Presale contract
         // The factory needs DEFAULT_ADMIN_ROLE on Locker/Vesting (granted by constructor)
         try vestingContract.grantRole(VESTER_ROLE, presaleAddress) {}
@@ -150,12 +155,10 @@ contract PresaleFactory is Ownable {
         catch {
             revert RoleGrantFailed();
         }
-         createdPresales.push(presaleAddress);
+        createdPresales.push(presaleAddress);
         // 4. Emit Factory-level event (optional, as Presale constructor also emits)
         emit PresaleCreated(msg.sender, presaleAddress, _token, _options.start, _options.end);
-        emit PresaleConfiguration(
-            _options
-        );
+        emit PresaleConfiguration(_options);
         return presaleAddress;
     }
 
@@ -190,29 +193,68 @@ contract PresaleFactory is Ownable {
         require(success, "ETH fee withdrawal failed");
     }
 
+    function calculateTotalTokensNeededForPresale(Presale.PresaleOptions memory _options, address _token)
+        external
+        view
+        returns (uint256 totalTokensNeeded)
+    {
+        if (_token == address(0)) revert ZeroAddress();
+        if (_options.hardCap == 0 || _options.presaleRate == 0 || _options.listingRate == 0) {
+            revert InvalidCapSettings();
+        }
+
+        uint256 currencyMultiplier = _getCurrencyMultiplier(_options.currency);
+        uint256 tokenDecimals = 10 ** ERC20(_token).decimals();
+
+        // Calculate tokens for presale: (hardCap * presaleRate * 10^tokenDecimals) / currencyMultiplier
+        uint256 tokensForPresale = (_options.hardCap * _options.presaleRate * tokenDecimals) / currencyMultiplier;
+
+        // Calculate tokens for liquidity: (currencyForLiquidity * listingRate * 10^tokenDecimals) / currencyMultiplier
+        uint256 currencyForLiquidity = (_options.hardCap * _options.liquidityBps) / 10_000;
+        uint256 tokensForLiquidity = (currencyForLiquidity * _options.listingRate * tokenDecimals) / currencyMultiplier;
+
+        totalTokensNeeded = tokensForPresale + tokensForLiquidity;
+        return totalTokensNeeded;
+    }
+
+    function _getCurrencyMultiplier(address _currency) private view returns (uint256) {
+        if (_currency == address(0)) {
+            return 1 ether; // ETH uses 10^18
+        }
+        try ERC20(_currency).decimals() returns (uint8 decimals) {
+            return 10 ** decimals;
+        } catch {
+            revert InvalidCurrencyDecimals();
+        }
+    }
 
     // --- View Functions ---
-   
-    function getCreationFee () external view returns (uint256) {
+
+    function getCreationFee() external view returns (uint256) {
         return creationFee;
     }
-    function getHousePercentage () external view returns (uint256) {
+
+    function getHousePercentage() external view returns (uint256) {
         return housePercentage;
     }
-    function getHouseAddress () external view returns (address) {
+
+    function getHouseAddress() external view returns (address) {
         return houseAddress;
     }
-    function getPresaleCount () external view returns (uint256) {
+
+    function getPresaleCount() external view returns (uint256) {
         return createdPresales.length;
     }
-    function getPresaleAt (uint256 index) external view returns (address) {
-    if (index >= createdPresales.length) revert IndexOutOfBounds(); // Use custom error
-    return createdPresales[index];
-}
 
-    function getAllPresales () external view returns (address[] memory) {
+    function getPresaleAt(uint256 index) external view returns (address) {
+        if (index >= createdPresales.length) revert IndexOutOfBounds(); // Use custom error
+        return createdPresales[index];
+    }
+
+    function getAllPresales() external view returns (address[] memory) {
         return createdPresales;
     }
+
     function getPresaleOptionsByAddress(address _presaleAddress)
         external
         view
@@ -220,7 +262,9 @@ contract PresaleFactory is Ownable {
     {
         // Basic check: Ensure the address is a contract
         uint32 size;
-        assembly { size := extcodesize(_presaleAddress) }
+        assembly {
+            size := extcodesize(_presaleAddress)
+        }
         if (size == 0) revert NotAPresaleContract();
 
         // Call the getOptions function on the target Presale contract
@@ -234,7 +278,4 @@ contract PresaleFactory is Ownable {
             revert NotAPresaleContract(); // Or a more specific error
         }
     }
-
-   
-    
 }

@@ -12,6 +12,8 @@ import {Presale} from "../Presale.sol";
  */
 interface IPresale {
     // --- Errors ---
+    error NotFactory();
+    error InvalidSettings();
     error Unauthorized();
     error InvalidState(uint8 currentState);
     error SoftCapNotReached();

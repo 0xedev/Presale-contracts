@@ -18,22 +18,19 @@ contract DeployPresale is Script {
         require(housePercentage <= 500, "House percentage too high"); // Max 5%
         require(houseAddress != address(0) || housePercentage == 0, "Invalid house address");
         if (feeToken != address(0)) {
-             uint32 size;
-             address tokenAddr = feeToken; // Avoid stack too deep
-             assembly { size := extcodesize(tokenAddr) }
-             require(size > 0, "Fee token is not a contract");
+            uint32 size;
+            address tokenAddr = feeToken; // Avoid stack too deep
+            assembly {
+                size := extcodesize(tokenAddr)
+            }
+            require(size > 0, "Fee token is not a contract");
         }
 
         vm.startBroadcast(deployerPrivateKey);
 
         // --- Deploy ONLY the Factory ---
         // The factory constructor will deploy LiquidityLocker and Vesting internally.
-        PresaleFactory presaleFactory = new PresaleFactory(
-            creationFee,
-            feeToken,
-            housePercentage,
-            houseAddress
-        );
+        PresaleFactory presaleFactory = new PresaleFactory(creationFee, feeToken, housePercentage, houseAddress);
 
         console.log("PresaleFactory deployed to:", address(presaleFactory));
         // Log the internally deployed addresses if needed for verification
@@ -44,4 +41,3 @@ contract DeployPresale is Script {
         return presaleFactory;
     }
 }
-
