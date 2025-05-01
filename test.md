@@ -43,3 +43,5 @@
 - [ ] Multiple presales with different house percentages (updated via factory).
 
 forge script script/DeployPresale.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY -vvvv
+
+forge script script/DeployPresale.s.sol --rpc-url $BASE_MAINNET_HTTPS --private-key $PRIVATE_KEY --broadcast --verify --etherscan-api-key $BASESCAN_API_KEY -vvvv
