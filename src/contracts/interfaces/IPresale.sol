@@ -12,6 +12,10 @@ import {Presale} from "../Presale.sol";
  */
 interface IPresale {
     // --- Errors ---
+       error InvalidNftContractAddress(); // <<< ADDED
+    error NotNftHolder(); // <<< ADDED
+    error NftCheckFailed(); // <<< ADDED
+    error InvalidMerkleRoot(); // <<< ADDED
     error NotFactory();
     error InvalidSettings();
     error Unauthorized();

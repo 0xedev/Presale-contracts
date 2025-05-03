@@ -136,14 +136,15 @@ contract PresaleFactory is Ownable {
             address(liquidityLocker),
             address(vestingContract),
             housePercentage,
-            houseAddress
+            houseAddress,
+            address(this) // Pass the factory address for fee handling
         );
 
         presaleAddress = address(newPresale);
 
         // Transfer presale tokens to the presale contract
         IERC20(_token).safeTransferFrom(msg.sender, presaleAddress, _options.tokenDeposit);
-        newPresale.initializeDeposit(_options.tokenDeposit);
+        newPresale.initializeDeposit();
 
         // 3. Grant Roles to the new Presale contract
         // The factory needs DEFAULT_ADMIN_ROLE on Locker/Vesting (granted by constructor)
