@@ -187,7 +187,6 @@ contract PresaleAdditionalTests is Test {
             whitelistType: Presale.WhitelistType.None,
             merkleRoot: bytes32(0),
             nftContractAddress: address(0)
-
         });
 
         // Owner creates the presale via the factory

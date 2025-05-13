@@ -12,7 +12,8 @@ import {Presale} from "../Presale.sol";
  */
 interface IPresale {
     // --- Errors ---
-       error InvalidNftContractAddress(); // <<< ADDED
+    error InsufficientTokensForLiquidity(uint256 tokenBalance, uint256 actualTokensForLiquidity);
+    error InvalidNftContractAddress(); // <<< ADDED
     error NotNftHolder(); // <<< ADDED
     error NftCheckFailed(); // <<< ADDED
     error InvalidMerkleRoot(); // <<< ADDED

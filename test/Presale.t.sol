@@ -1255,11 +1255,9 @@ contract PresaleTest is Test {
             vestingPercentage: 0, // Default: no vesting
             vestingDuration: 0,
             leftoverTokenOption: 0, // Default: return to owner
-            currency: address(0) // ETH
-            , // Added comma
-
+            currency: address(0), // ETH
+                // Added comma
             // Whitelist fields (even if not used)
-
             whitelistType: Presale.WhitelistType.None,
             merkleRoot: bytes32(0),
             nftContractAddress: address(0)
@@ -1267,7 +1265,12 @@ contract PresaleTest is Test {
     }
 
     // Helper to create, approve, and deposit for a presale
-    function _createAndSetupPresale(Presale.PresaleOptions memory opts, Presale.WhitelistType whitelistType, bytes32 merkleRoot, address nftContractAddress) internal returns (Presale) {
+    function _createAndSetupPresale(
+        Presale.PresaleOptions memory opts,
+        Presale.WhitelistType whitelistType,
+        bytes32 merkleRoot,
+        address nftContractAddress
+    ) internal returns (Presale) {
         address presaleAddr = factory.createPresale(opts, address(token), weth, address(router));
         Presale presale = Presale(payable(presaleAddr));
         token.approve(address(presale), opts.tokenDeposit); // Approve before deposit
