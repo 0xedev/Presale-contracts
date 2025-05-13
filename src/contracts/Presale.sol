@@ -15,7 +15,7 @@ import {LiquidityLocker} from "./LiquidityLocker.sol";
 import {Vesting} from "./Vesting.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-contract Presale is IPresale, Ownable, ReentrancyGuard {
+contract Presale is ReentrancyGuard, Ownable, IPresale {
     using SafeERC20 for IERC20;
     using Address for address payable;
 
@@ -236,33 +236,6 @@ contract Presale is IPresale, Ownable, ReentrancyGuard {
         );
     }
 
-    // function setMerkleRoot(bytes32 _merkleRoot) external onlyOwner {
-    //     if (state != PresaleState.Pending) revert InvalidState(uint8(state));
-    //     merkleRoot = _merkleRoot;
-    //     whitelistEnabled = (_merkleRoot != bytes32(0));
-    //     emit MerkleRootUpdated(_merkleRoot);
-    // }
-
-    // function deposit() external onlyFactory whenNotPaused returns (uint256) {
-    //     if (state != PresaleState.Pending) revert InvalidState(uint8(state));
-
-    //     uint256 amount = options.tokenDeposit;
-    //     IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-
-    //     tokensClaimable = _tokensForPresale();
-    //     tokensLiquidity = _tokensForLiquidity();
-    //     uint256 totalTokensNeeded = tokensClaimable + tokensLiquidity;
-
-    //     if (amount < totalTokensNeeded) {
-    //         revert InsufficientTokenDeposit(amount, totalTokensNeeded);
-    //     }
-
-    //     tokenBalance = amount;
-    //     state = PresaleState.Active;
-
-    //     emit Deposit(msg.sender, amount, block.timestamp);
-    //     return amount;
-    // }
 
     function finalize()
         external

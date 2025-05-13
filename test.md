@@ -33,7 +33,7 @@
 - [ ] Handles zero `housePercentage` correctly.
 - [ ] Uses immutable `housePercentage` and `houseAddress` set by factory.
 
-#### ⚠️ Edge Cases
+#### ⚠️ Edge Cases 0x9314550CA85238BEfcC438FcCBe5Adf203D0798d
 
 - [ ] Leftover tokens with full hard cap reached (no unsold tokens).
 - [ ] Leftover tokens with partial contributions.
@@ -42,6 +42,8 @@
 - [ ] Liquidity BPS boundary values (5000, 10000).
 - [ ] Multiple presales with different house percentages (updated via factory).
 
-forge script script/DeployPresale.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY -vvvv
+forge script script/CreatePresale.s.sol --rpc-url $BASE_MAINNET_HTTPS --private-key $PRIVATE_KEY --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY -vvvv
 
-forge script script/DeployPresale.s.sol --rpc-url $BASE_MAINNET_HTTPS --private-key $PRIVATE_KEY --broadcast --verify --etherscan-api-key $BASESCAN_API_KEY -vvvv
+forge script script/FinalizePresaleScript.s.sol --rpc-url $BASE_MAINNET_HTTPS --private-key $PRIVATE_KEY --broadcast --verify --etherscan-api-key $BASESCAN_API_KEY -vvvv
+
+forge script --tc script/FinalizePresaleScript.s.sol --rpc-url $BASE_MAINNET_HTTPS --private-key $PRIVATE_KEY

@@ -11,32 +11,31 @@ contract CreatePresale is Script {
     using SafeERC20 for IERC20;
 
     // --- Configuration - Load from environment variables ---
-    address factoryAddress = vm.envAddress("FACTORY_ADDRESS"); // Your deployed factory: 0xB70f14D9478dD54454898a4dE0EDae34a3a3E03d
-    address presaleTokenAddress = vm.envAddress("PRESALE_TOKEN_ADDRESS"); // Token being sold
-    address currencyTokenAddress = vm.envAddress("CURRENCY_TOKEN_ADDRESS"); // address(0) for ETH
-    address wethAddress = vm.envAddress("WETH_ADDRESS"); // e.g., 0x4200000000000000000000000000000000000006 on Base
-    address routerAddress = vm.envAddress("ROUTER_ADDRESS"); // e.g., 0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24 on Base
+    address factoryAddress = vm.envAddress("FACTORY_ADDRESS"); 
+    address presaleTokenAddress = vm.envAddress("PRESALE_TOKEN_ADDRESS"); 
+    address currencyTokenAddress = vm.envAddress("CURRENCY_TOKEN_ADDRESS"); 
+    address wethAddress = vm.envAddress("WETH_ADDRESS");
+    address routerAddress = vm.envAddress("ROUTER_ADDRESS"); 
     uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 
-    // Presale Options - Load from environment or set defaults
-    // Ensure these values make sense together!
-    uint256 hardCap = vm.envUint("HARD_CAP"); // e.g., 10 ether or 10_000 * 1e6 for 10k USDC
-    uint256 softCap = vm.envUint("SOFT_CAP"); // e.g., 5 ether or 5_000 * 1e6 for 5k USDC
-    uint256 minContribution = vm.envUint("MIN_CONTRIBUTION"); // e.g., 0.01 ether or 10 * 1e6 for 10 USDC
-    uint256 maxContribution = vm.envUint("MAX_CONTRIBUTION"); // e.g., 1 ether or 1_000 * 1e6 for 1k USDC
-    uint256 presaleRate = vm.envUint("PRESALE_RATE"); // Tokens per 1 unit of currency (e.g., 1000 tokens per 1 ETH/USDC)
-    uint256 listingRate = vm.envUint("LISTING_RATE"); // Tokens per 1 unit of currency for liquidity (MUST be < presaleRate)
-    uint256 liquidityBps = vm.envUint("LIQUIDITY_BPS"); // e.g., 7000 (70%)
-    uint256 slippageBps = vm.envOr("SLIPPAGE_BPS", uint256(500)); // Default 5%
-    uint256 startOffset = vm.envOr("START_TIME_OFFSET", uint256(600)); // Default 10 mins from now
-    uint256 duration = vm.envOr("DURATION", uint256(3 days)); // Default 3 days
-    uint256 lockupDuration = vm.envOr("LOCKUP_DURATION", uint256(90 days)); // Default 90 days
-    uint256 vestingPercentage = vm.envOr("VESTING_PERCENTAGE", uint256(0)); // Default 0% (0 BPS)
-    uint256 vestingDuration = vm.envOr("VESTING_DURATION", uint256(0)); // Default 0 seconds
-    uint256 leftoverTokenOption = vm.envOr("LEFTOVER_OPTION", uint256(0)); // Default 0 (Return to owner)
-      uint8 whitelistType = uint8(vm.envOr("WHITELIST_TYPE", uint256(0))); // 0=None, 1=Merkle, 2=NFT
-    bytes32 merkleRoot = vm.envBytes32("MERKLE_ROOT"); // Only needed if WHITELIST_TYPE=1
-    address nftContractAddress = vm.envAddress("NFT_CONTRACT_ADDRESS"); // Only needed if WHITELIST_TYPE=2
+    
+    uint256 hardCap = vm.envUint("HARD_CAP"); 
+    uint256 softCap = vm.envUint("SOFT_CAP"); 
+    uint256 minContribution = vm.envUint("MIN_CONTRIBUTION"); 
+    uint256 maxContribution = vm.envUint("MAX_CONTRIBUTION"); 
+    uint256 presaleRate = vm.envUint("PRESALE_RATE"); 
+    uint256 listingRate = vm.envUint("LISTING_RATE"); 
+    uint256 liquidityBps = vm.envUint("LIQUIDITY_BPS"); 
+    uint256 slippageBps = vm.envOr("SLIPPAGE_BPS", uint256(500)); 
+    uint256 startOffset = vm.envOr("START_TIME_OFFSET", uint256(600)); 
+    uint256 duration = vm.envOr("DURATION", uint256(3 days)); 
+    uint256 lockupDuration = vm.envOr("LOCKUP_DURATION", uint256(90 days)); 
+    uint256 vestingPercentage = vm.envOr("VESTING_PERCENTAGE", uint256(0)); 
+    uint256 vestingDuration = vm.envOr("VESTING_DURATION", uint256(0)); 
+    uint256 leftoverTokenOption = vm.envOr("LEFTOVER_OPTION", uint256(0)); 
+      uint8 whitelistType = uint8(vm.envOr("WHITELIST_TYPE", uint256(0))); 
+    bytes32 merkleRoot = vm.envOr("MERKLE_ROOT", bytes32(0)); 
+    address nftContractAddress = vm.envOr("NFT_CONTRACT_ADDRESS", address(0)); 
 
     function run() external returns (address presaleAddress) {
         // --- Input Validation ---
@@ -90,8 +89,7 @@ contract CreatePresale is Script {
         console.log("Required Presale Token Deposit:", requiredTokenDeposit);
 
         Presale.PresaleOptions memory options = optionsPreCalc;
-        options.tokenDeposit = requiredTokenDeposit; // Set the calculated deposit amount
-
+        options.tokenDeposit = requiredTokenDeposit; 
         // --- Approvals & Fee Handling ---
         vm.startBroadcast(deployerPrivateKey);
 
@@ -116,7 +114,7 @@ contract CreatePresale is Script {
                 IERC20 feeToken = IERC20(feeTokenAddress);
                 feeToken.approve(factoryAddress, creationFee); // Approve factory to pull fee
                 console.log("Fee token approval successful.");
-                // Note: Factory transfers fee to owner in createPresale
+              
             }
         } else {
             console.log("No creation fee required.");
