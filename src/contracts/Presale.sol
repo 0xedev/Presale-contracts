@@ -358,8 +358,8 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
 
         if (options.whitelistType == WhitelistType.Merkle) {
             if (
-                ! // Use root from options
-                MerkleProof.verify(_merkleProof, options.merkleRoot, keccak256(abi.encodePacked(_contributor)))
+                // Use root from options
+                !MerkleProof.verify(_merkleProof, options.merkleRoot, keccak256(abi.encodePacked(_contributor)))
             ) {
                 revert NotWhitelisted();
             }
@@ -424,15 +424,30 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
     }
 
     function _liquify(uint256 _currencyAmount, uint256 _tokenAmount) private {
-        if (_currencyAmount == 0 || _tokenAmount == 0) {
-            revert ZeroLiquidityAmounts();
+        address pair = _getOrCreatePair();
+        (uint256 reserveA, uint256 reserveB,) = IUniswapV2Pair(pair).getReserves();
+        bool tokenIsA = address(token) < (options.currency == address(0) ? weth : options.currency);
+        (uint256 reserveToken, uint256 reserveCurrency) = tokenIsA ? (reserveA, reserveB) : (reserveB, reserveA);
+
+        // Adjust currencyAmount to match reserves
+        if (reserveToken > 0) {
+            uint256 expectedCurrency = (_tokenAmount * reserveCurrency) / reserveToken;
+            if (_currencyAmount > expectedCurrency) {
+                _currencyAmount = expectedCurrency; // Use reserve-compatible amount
+                _tokenAmount =
+                    (_currencyAmount * options.listingRate * 10 ** token.decimals()) / _getCurrencyMultiplier();
+            }
         }
 
-        LiquidityParams memory params;
-        params.currencyAmount = _currencyAmount;
-        params.tokenAmount = _tokenAmount;
-        (params.minToken, params.minCurrency) = _calculateMinAmounts(_tokenAmount, _currencyAmount);
-        params.pair = _getOrCreatePair();
+        (uint256 minToken, uint256 minCurrency) = _calculateMinAmounts(_tokenAmount, _currencyAmount);
+        LiquidityParams memory params = LiquidityParams({
+            currencyAmount: _currencyAmount,
+            tokenAmount: _tokenAmount,
+            minToken: minToken,
+            minCurrency: minCurrency,
+            pair: pair,
+            lpAmount: 0
+        });
 
         IERC20(token).approve(address(uniswapV2Router02), params.tokenAmount);
         uint256 lpAmountBefore = IERC20(params.pair).balanceOf(address(this));
@@ -457,6 +472,8 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
     function _getOrCreatePair() private returns (address pair) {
         address pairCurrency = (options.currency == address(0)) ? weth : options.currency;
         pair = IUniswapV2Factory(factory).getPair(address(token), pairCurrency);
+        
+        
         if (pair == address(0)) {
             try IUniswapV2Factory(factory).createPair(address(token), pairCurrency) returns (address newPair) {
                 pair = newPair;
@@ -483,7 +500,7 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
         (uint256 reserveToken, uint256 reserveCurrency) = tokenIsA ? (reserveA, reserveB) : (reserveB, reserveA);
         uint256 expectedCurrency = reserveToken > 0 ? (tokenAmount * reserveCurrency) / reserveToken : liquidityAmount;
 
-        return (liquidityAmount >= (expectedCurrency * 9900) / BASIS_POINTS, tokenAmount, expectedCurrency);
+        return (liquidityAmount >= (expectedCurrency * 9700) / BASIS_POINTS, tokenAmount, expectedCurrency);
     }
 
     function _addLiquidityETH(LiquidityParams memory params) private {
@@ -651,6 +668,13 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
     function initializeDeposit() external onlyFactory whenNotPaused returns (uint256) {
         if (state != PresaleState.Pending) revert InvalidState(uint8(state));
         if (block.timestamp >= options.start) revert NotInPurchasePeriod();
+
+        // Check if a pair already exists for this token and currency.
+        // This presale system is intended for launching new tokens.
+        address pairCurrencyCheck = (options.currency == address(0)) ? weth : options.currency;
+        if (IUniswapV2Factory(factory).getPair(address(token), pairCurrencyCheck) != address(0)) {
+            revert PairAlreadyExists(address(token), pairCurrencyCheck);
+        }
 
         uint256 depositedAmount = IERC20(token).balanceOf(address(this));
         if (depositedAmount == 0) revert ZeroAmount();

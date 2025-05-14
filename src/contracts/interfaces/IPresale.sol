@@ -12,6 +12,7 @@ import {Presale} from "../Presale.sol";
  */
 interface IPresale {
     // --- Errors ---
+    error PairAlreadyExists(address token, address currency);
     error InsufficientTokensForLiquidity(uint256 tokenBalance, uint256 actualTokensForLiquidity);
     error InvalidNftContractAddress(); // <<< ADDED
     error NotNftHolder(); // <<< ADDED

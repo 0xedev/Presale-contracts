@@ -42,7 +42,7 @@
 - [ ] Liquidity BPS boundary values (5000, 10000).
 - [ ] Multiple presales with different house percentages (updated via factory).
 
-forge script script/CreatePresale.s.sol --rpc-url $BASE_MAINNET_HTTPS --private-key $PRIVATE_KEY --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY -vvvv
+forge script script/FinalizePresale.s.sol --rpc-url $BASE_MAINNET_HTTPS --private-key $PRIVATE_KEY --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY -vvvv
 
 forge script script/DeployPresale.s.sol --rpc-url $BASE_MAINNET_HTTPS --private-key $PRIVATE_KEY --broadcast --verify --etherscan-api-key $BASESCAN_API_KEY -vvvv
 
