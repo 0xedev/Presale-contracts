@@ -29,8 +29,8 @@ contract PresaleFactory is Ownable {
     uint256 public constant BASIS_POINTS = 10_000;
 
     // House fee configuration (passed to Presale instances)
-    uint256 public immutable housePercentage; // Percentage (BPS) taken from raised funds for the house
-    address public immutable houseAddress; // Address receiving the house fee
+    uint256 public housePercentage; // Percentage (BPS) taken from raised funds for the house
+    address public houseAddress; // Address receiving the house fee
 
     // Role identifiers (assuming Vesting/Locker use OpenZeppelin AccessControl)
     bytes32 public constant VESTER_ROLE = keccak256("VESTER_ROLE");
@@ -48,6 +48,7 @@ contract PresaleFactory is Ownable {
     event PresaleConfiguration(Presale.PresaleOptions indexed options);
 
     event FeeConfigurationChanged(uint256 newCreationFee, address newFeeToken);
+    event HouseConfigurationChanged(uint256 newHousePercentage, address newHouseAddress);
 
     // --- Errors ---
     error FeePaymentFailed();
@@ -181,6 +182,27 @@ contract PresaleFactory is Ownable {
         creationFee = _newCreationFee;
         feeToken = _newFeeToken;
         emit FeeConfigurationChanged(_newCreationFee, _newFeeToken);
+    }
+
+    /**
+     * @notice Updates the house fee percentage and address. Only callable by the owner.
+     * @param _newHousePercentage The new house fee percentage (in BPS, e.g., 100 for 1%).
+     * @param _newHouseAddress The new address to receive house fees.
+     */
+    function setHouseConfiguration(uint256 _newHousePercentage, address _newHouseAddress) external onlyOwner {
+        if (_newHousePercentage > 500) revert InvalidHouseConfiguration(); // Max 5% house fee
+        if (_newHouseAddress == address(0) && _newHousePercentage > 0) {
+            revert InvalidHouseConfiguration(); // Cannot set zero address if percentage is non-zero
+        }
+        if (_newHouseAddress != address(0)) {
+            // Basic check if it looks like a contract or EOA, not strictly necessary but good practice
+            // For EOA, extcodesize is 0. For contracts, it's > 0.
+            // This doesn't prevent sending to a non-contract address if intended.
+        }
+
+        housePercentage = _newHousePercentage;
+        houseAddress = _newHouseAddress;
+        emit HouseConfigurationChanged(_newHousePercentage, _newHouseAddress);
     }
 
     /**

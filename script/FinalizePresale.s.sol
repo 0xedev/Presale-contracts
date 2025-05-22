@@ -38,7 +38,7 @@ interface IPresale {
 }
 
 contract FinalizePresale is Script {
-    address constant PRESALE = 0xFA5B34a76a2A39BB7B3Cf1C43ce14EB34CB6464d;
+    address constant PRESALE = 0xA080f38B07E4cccA6D5c5D4F3A8416d8bf213366;
 
     function run() external {
         // Load private key from env

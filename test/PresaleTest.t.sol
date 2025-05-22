@@ -20,7 +20,7 @@ contract MockERC20 is ERC20 {
 
 contract MockLiquidityLocker {
     // Simulate receiving LP tokens
-    function lock(address lpTokenAddress, uint256 amount, uint256 /*unlockTime*/, address /*beneficiary*/) external {
+    function lock(address lpTokenAddress, uint256 amount, uint256, /*unlockTime*/ address /*beneficiary*/ ) external {
         // In a real scenario, this would call transferFrom on the lpTokenAddress
         // For the mock, we'll assume the Presale contract (msg.sender to this function via Presale.sol)
         // has approved this contract, and this contract now "owns" the LP tokens.
@@ -119,12 +119,7 @@ contract PresaleTest is Test {
         tokenGlobal.approve(address(routerGlobal), 141_704_869_404 * 10 ** 18);
         vm.deal(deployer, 10_200 ether); // Increased to match presale liquidity
         routerGlobal.addLiquidityETH{value: 10_200 ether}(
-            address(tokenGlobal),
-            141_704_869_404 * 10 ** 18,
-            0,
-            0,
-            deployer,
-            block.timestamp + 1 hours
+            address(tokenGlobal), 141_704_869_404 * 10 ** 18, 0, 0, deployer, block.timestamp + 1 hours
         );
         vm.stopPrank();
     }
@@ -167,13 +162,7 @@ contract PresaleTest is Test {
         tokenGlobal.transfer(address(presaleGlobal), baseOptions.tokenDeposit);
 
         // Attempt to initializeDeposit (should fail because pair for tokenGlobal exists)
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IPresale.PairAlreadyExists.selector,
-                address(tokenGlobal),
-                weth
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(IPresale.PairAlreadyExists.selector, address(tokenGlobal), weth));
         presaleGlobal.initializeDeposit();
         vm.stopPrank();
     }
@@ -210,7 +199,7 @@ contract PresaleTest is Test {
         uint256 deployerBalanceAfterFinalizeAndWithdraw = deployer.balance;
 
         // Assertions
-        assertEq(uint(currentPresale.state()), uint(Presale.PresaleState.Finalized), "Presale not finalized");
+        assertEq(uint256(currentPresale.state()), uint256(Presale.PresaleState.Finalized), "Presale not finalized");
         address pairAddressAfter = factoryGlobal.getPair(address(localToken), weth);
         assertNotEq(pairAddressAfter, address(0), "Pair was not created");
         assertTrue(IUniswapV2Pair(pairAddressAfter).balanceOf(address(liquidityLockerGlobal)) > 0, "LP not locked");
@@ -231,7 +220,10 @@ contract PresaleTest is Test {
         uint256 expectedFinalDeployerBalance = 100_000 ether + expectedOwnerBalance; // Ideal balance ignoring gas
         // Allow for up to 0.1 ETH in gas costs for all deployer's operations in this test. This is a rough estimate.
         assertTrue(deployerBalanceAfterFinalizeAndWithdraw <= expectedFinalDeployerBalance, "Deployer balance too high");
-        assertTrue(deployerBalanceAfterFinalizeAndWithdraw >= expectedFinalDeployerBalance - 0.1 ether, "Deployer ETH balance incorrect after withdraw");
+        assertTrue(
+            deployerBalanceAfterFinalizeAndWithdraw >= expectedFinalDeployerBalance - 0.1 ether,
+            "Deployer ETH balance incorrect after withdraw"
+        );
 
         assertEq(house.balance, (20_000 ether * 100) / 10000, "House ETH balance incorrect");
     }
@@ -250,18 +242,14 @@ contract PresaleTest is Test {
             deployer,
             address(liquidityLockerGlobal),
             address(vestingGlobal),
-            100, house, deployer
+            100,
+            house,
+            deployer
         );
         tokenGlobal.approve(address(currentPresale), baseOptions.tokenDeposit);
         tokenGlobal.transfer(address(currentPresale), baseOptions.tokenDeposit);
         // Attempt to initialize deposit, which should fail
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IPresale.PairAlreadyExists.selector,
-                address(tokenGlobal),
-                weth
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(IPresale.PairAlreadyExists.selector, address(tokenGlobal), weth));
         currentPresale.initializeDeposit();
         vm.stopPrank();
     }
@@ -350,7 +338,7 @@ contract MockUniswapV2Pair {
         balanceOf[to] += amount;
     }
 
-    function approve(address /*spender*/, uint256 /*value*/) external pure returns (bool) {
+    function approve(address, /*spender*/ uint256 /*value*/ ) external pure returns (bool) {
         // Mock approval, does nothing but allows the call to succeed
         return true;
     }
@@ -393,7 +381,8 @@ contract MockUniswapV2Router02 {
         uint256 actualAmountTokenToAdd = amountTokenDesired;
         uint256 actualAmountETHToAdd = amountETHDesired;
 
-        if (rToken > 0 && rETH > 0) { // If there's existing liquidity
+        if (rToken > 0 && rETH > 0) {
+            // If there's existing liquidity
             uint256 amountBOptimal = (amountTokenDesired * uint256(rETH)) / uint256(rToken); // Optimal ETH for amountTokenDesired
             if (amountBOptimal <= amountETHDesired) {
                 // We have enough ETH for the desired tokens; router would use amountTokenDesired and amountBOptimal ETH.
@@ -415,9 +404,11 @@ contract MockUniswapV2Router02 {
         address pairToken0 = MockUniswapV2Pair(pair).token0();
 
         // Ensure reserves are set in the pair contract according to its token0/token1 order
-        if (token == pairToken0) { // If the presale token ('token') is token0 of the pair
+        if (token == pairToken0) {
+            // If the presale token ('token') is token0 of the pair
             MockUniswapV2Pair(pair).setReserves(newTotalReserveToken, newTotalReserveETH);
-        } else { // The presale token ('token') must be token1 of the pair (so WETH is token0)
+        } else {
+            // The presale token ('token') must be token1 of the pair (so WETH is token0)
             MockUniswapV2Pair(pair).setReserves(newTotalReserveETH, newTotalReserveToken);
         }
 

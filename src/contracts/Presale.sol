@@ -99,7 +99,7 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
     address[] public contributors;
     // bytes32 public merkleRoot;
 
-    uint256[] private ALLOWED_LIQUIDITY_BPS = [5000, 6000, 7000, 8000, 9000, 10000];
+    uint256[] private ALLOWED_LIQUIDITY_BPS;
 
     ERC20 public immutable token;
     IUniswapV2Router02 public immutable uniswapV2Router02;
@@ -145,6 +145,14 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
         address _houseAddress,
         address _presaleFactoryAddress
     ) Ownable(_creator) {
+        // Set allowed liquidity BPS values
+        ALLOWED_LIQUIDITY_BPS.push(5000);
+        ALLOWED_LIQUIDITY_BPS.push(6000);
+        ALLOWED_LIQUIDITY_BPS.push(7000);
+        ALLOWED_LIQUIDITY_BPS.push(8000);
+        ALLOWED_LIQUIDITY_BPS.push(9000);
+        ALLOWED_LIQUIDITY_BPS.push(10000);
+
         if (_weth == address(0) || _token == address(0) || _uniswapV2Router02 == address(0)) {
             revert InvalidInitialization();
         }
@@ -181,6 +189,10 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
         }
         if (_options.whitelistType == WhitelistType.NFT && _options.nftContractAddress == address(0)) {
             revert InvalidNftContractAddress(); // Need NFT contract if type is NFT
+        }
+        if (!isAllowedLiquidityBps(_options.liquidityBps)) {
+            // <<< ADDED VALIDATION
+            revert InvalidLiquidityBps();
         }
 
         weth = _weth;
@@ -451,7 +463,11 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
 
         IERC20(token).approve(address(uniswapV2Router02), params.tokenAmount);
         uint256 lpAmountBefore = IERC20(params.pair).balanceOf(address(this));
-        _addLiquidityETH(params);
+        if (options.currency == address(0)) {
+            _addLiquidityETH(params);
+        } else {
+            _addLiquidityERC20(params);
+        }
         IERC20(token).approve(address(uniswapV2Router02), 0);
 
         params.lpAmount = IERC20(params.pair).balanceOf(address(this)) - lpAmountBefore;
@@ -472,8 +488,7 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
     function _getOrCreatePair() private returns (address pair) {
         address pairCurrency = (options.currency == address(0)) ? weth : options.currency;
         pair = IUniswapV2Factory(factory).getPair(address(token), pairCurrency);
-        
-        
+
         if (pair == address(0)) {
             try IUniswapV2Factory(factory).createPair(address(token), pairCurrency) returns (address newPair) {
                 pair = newPair;
@@ -516,6 +531,27 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
         } catch {
             revert LiquificationFailed();
         }
+    }
+
+    function _addLiquidityERC20(LiquidityParams memory params) private {
+        // Approve the router to spend the currency token from this presale contract
+        IERC20(options.currency).approve(address(uniswapV2Router02), params.currencyAmount);
+
+        try uniswapV2Router02.addLiquidity(
+            address(token),
+            options.currency,
+            params.tokenAmount,
+            params.currencyAmount,
+            params.minToken,
+            params.minCurrency,
+            address(this),
+            block.timestamp + 600
+        ) {} catch Error(string memory reason) {
+            revert LiquificationFailedReason(reason);
+        } catch {
+            revert LiquificationFailed();
+        }
+        IERC20(options.currency).approve(address(uniswapV2Router02), 0); // Clean up approval
     }
 
     function _lockLiquidity(address _pair, uint256 _lpAmount) private {
