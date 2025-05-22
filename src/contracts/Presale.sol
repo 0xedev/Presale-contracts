@@ -248,7 +248,8 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
     }
 
     function cancel() external nonReentrant onlyOwner whenNotPaused returns (bool) {
-        if (state != PresaleState.Pending && state != PresaleState.Active) {
+        // Only allow cancel if presale ended and soft cap NOT reached
+        if (state != PresaleState.Active || block.timestamp <= options.end || totalRaised >= options.softCap) {
             revert InvalidState(uint8(state));
         }
 

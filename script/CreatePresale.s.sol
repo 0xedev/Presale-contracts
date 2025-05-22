@@ -27,7 +27,7 @@ contract CreatePresale is Script {
     uint256 liquidityBps = vm.envUint("LIQUIDITY_BPS");
     uint256 slippageBps = vm.envOr("SLIPPAGE_BPS", uint256(500));
     uint256 startOffset = vm.envOr("START_TIME_OFFSET", uint256(600));
-    uint256 duration = vm.envOr("DURATION", uint256(3 days));
+    uint256 duration = vm.envOr("DURATION", uint256(600));
     uint256 lockupDuration = vm.envOr("LOCKUP_DURATION", uint256(90 days));
     uint256 vestingPercentage = vm.envOr("VESTING_PERCENTAGE", uint256(0));
     uint256 vestingDuration = vm.envOr("VESTING_DURATION", uint256(0));

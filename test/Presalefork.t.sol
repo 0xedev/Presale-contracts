@@ -1123,12 +1123,14 @@ contract PresaleForkTest is Test {
 
             uint256 currentTotalRaised = presale.totalRaised(); // This will be presaleOptions.softCap
             uint256 expectedSimLiquidityAmount = (currentTotalRaised * presaleOptions.liquidityBps) / 10_000;
-            
+
             uint8 presaleTokenDecimals = presaleToken.decimals(); // Mock ERC20 default is 18
             uint8 currencyTokenDecimals = usdc.decimals(); // Mock USDC set to 6
             uint256 currencyMultiplier = 10 ** currencyTokenDecimals;
 
-            uint256 expectedSimTokenAmount = (expectedSimLiquidityAmount * presaleOptions.listingRate * (10 ** presaleTokenDecimals)) / currencyMultiplier;
+            uint256 expectedSimTokenAmount = (
+                expectedSimLiquidityAmount * presaleOptions.listingRate * (10 ** presaleTokenDecimals)
+            ) / currencyMultiplier;
             uint256 maxTokensForLiq = presale.tokensLiquidity(); // Max allocation based on hardCap
             if (expectedSimTokenAmount > maxTokensForLiq) {
                 expectedSimTokenAmount = maxTokensForLiq;
@@ -1139,9 +1141,16 @@ contract PresaleForkTest is Test {
 
             (bool canAddInit, uint256 simTokenAmountInit, uint256 simCurrencyAmountInit) =
                 presale.simulateLiquidityAddition();
-            assertTrue(canAddInit, "simulateLiquidityAddition should be possible on a finalized presale with sufficient balance");
+            assertTrue(
+                canAddInit,
+                "simulateLiquidityAddition should be possible on a finalized presale with sufficient balance"
+            );
             assertEq(simTokenAmountInit, expectedSimTokenAmount, "Simulated token amount mismatch on finalized presale");
-            assertEq(simCurrencyAmountInit, expectedSimCurrencyReturned, "Simulated currency amount mismatch on finalized presale");
+            assertEq(
+                simCurrencyAmountInit,
+                expectedSimCurrencyReturned,
+                "Simulated currency amount mismatch on finalized presale"
+            );
         }
     }
 }
