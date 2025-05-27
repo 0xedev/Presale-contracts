@@ -52,8 +52,8 @@ contract Vesting is AccessControl, ReentrancyGuard {
     error InvalidAmount();
     error InvalidDuration();
     error NoTokensToRelease();
-    error InvalidAddress();
-    error NoTokensToRescue();
+    // error InvalidAddress();
+    // error NoTokensToRescue();
     error AlreadyPaused();
     error NotPaused();
 

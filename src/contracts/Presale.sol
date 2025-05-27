@@ -80,9 +80,9 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
     }
 
     uint256 public totalRefundable;
-    uint256 public constant BASIS_POINTS = 10_000;
+    uint256 public constant BASIS_POINTS = 1e4;
     bool public paused;
-    bool public whitelistEnabled;
+    bool public immutable whitelistEnabled;
     // uint256 public claimDeadline;
     uint256 public ownerBalance;
 
@@ -195,10 +195,10 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
             revert InvalidLiquidityBps();
         }
 
+        // Set all state variables first
         weth = _weth;
         token = ERC20(_token);
         uniswapV2Router02 = IUniswapV2Router02(_uniswapV2Router02);
-        factory = uniswapV2Router02.factory();
         liquidityLocker = LiquidityLocker(_liquidityLocker);
         vestingContract = Vesting(_vestingContract);
         housePercentage = _housePercentage;
@@ -206,41 +206,45 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
         options = _options;
         _presaleFactory = _presaleFactoryAddress;
         state = PresaleState.Pending;
-
         whitelistEnabled = (_options.whitelistType != WhitelistType.None);
+
+        // Make external call after all state changes
+        factory = uniswapV2Router02.factory();
 
         emit PresaleCreated(_creator, address(this), _token, _options.start, _options.end);
     }
 
-    function finalize() external onlyOwner whenNotPaused nonReentrant returns (bool) {
+    function finalize() external nonReentrant onlyOwner whenNotPaused  returns (bool) {
         if (state != PresaleState.Active) revert InvalidState(uint8(state));
         if (block.timestamp <= options.end) revert PresaleNotEnded();
         if (totalRaised < options.softCap) revert SoftCapNotReached();
 
-        state = PresaleState.Finalized;
-
         uint256 liquidityAmount = _weiForLiquidity();
-        // Calculate tokens to pair based on actual currency for LP and listingRate
         uint256 tokensToPairForLiquidity =
             (liquidityAmount * options.listingRate * 10 ** token.decimals()) / _getCurrencyMultiplier();
+        uint256 actualTokensForLiquidity = 0;
 
         if (liquidityAmount > 0 && tokensToPairForLiquidity > 0) {
-            // Ensure we do not use more tokens than what's available in balance.
-            // The original `tokensLiquidity` (state variable) acts as an upper bound from hardcap allocation.
-            uint256 actualTokensForLiquidity =
+            actualTokensForLiquidity =
                 (tokensToPairForLiquidity > tokensLiquidity) ? tokensLiquidity : tokensToPairForLiquidity;
             if (tokenBalance < actualTokensForLiquidity) {
                 revert InsufficientTokensForLiquidity(tokenBalance, actualTokensForLiquidity);
             }
-
-            _liquify(liquidityAmount, actualTokensForLiquidity);
-            tokenBalance -= actualTokensForLiquidity; // Reduce balance by tokens actually used for LP
         }
 
-        _distributeHouseFunds();
+        // Update all state variables before external interactions
+        state = PresaleState.Finalized;
+        if (actualTokensForLiquidity > 0) {
+            tokenBalance -= actualTokensForLiquidity;
+        }
         ownerBalance = totalRaised - liquidityAmount - ((totalRaised * housePercentage) / BASIS_POINTS);
         claimDeadline = block.timestamp + 180 days;
 
+        // External interactions after state updates
+        if (liquidityAmount > 0 && actualTokensForLiquidity > 0) {
+            _liquify(liquidityAmount, actualTokensForLiquidity);
+        }
+        _distributeHouseFunds();
         _handleLeftoverTokens();
 
         emit Finalized(msg.sender, totalRaised, block.timestamp);
@@ -309,19 +313,20 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
         emit Unpaused(msg.sender);
     }
 
-    function contribute(bytes32[] calldata _merkleProof) external payable whenNotPaused nonReentrant {
+    function contribute(bytes32[] calldata _merkleProof) external payable nonReentrant whenNotPaused  {
         _contribute(msg.sender, msg.value, _merkleProof);
     }
 
-    receive() external payable whenNotPaused nonReentrant {
+    receive() external payable nonReentrant whenNotPaused  {
         bytes32[] memory emptyProof;
         _contribute(msg.sender, msg.value, emptyProof);
     }
 
     function contributeStablecoin(uint256 _amount, bytes32[] calldata _merkleProof)
         external
-        whenNotPaused
         nonReentrant
+        whenNotPaused
+        
     {
         if (options.currency == address(0)) revert StablecoinNotAccepted();
         if (_amount == 0) revert ZeroAmount();

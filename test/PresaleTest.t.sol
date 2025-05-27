@@ -188,7 +188,7 @@ contract PresaleTest is Test {
 
         // Finalize (should succeed)
         // Capture deployer's balance before operations that spend its gas and give it income
-        uint256 deployerBalanceBeforeFinalizeAndWithdraw = deployer.balance;
+        // uint256 deployerBalanceBeforeFinalizeAndWithdraw = deployer.balance;
 
         vm.startPrank(deployer);
         currentPresale.finalize();

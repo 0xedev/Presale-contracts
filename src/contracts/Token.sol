@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * @dev A simple ERC20 token for presale purposes.
  * The entire initial supply is minted to the deployer of the contract.
  */
-contract MyPresaleToken is ERC20, Ownable {
+contract MyTokn is ERC20, Ownable {
     /**
      * @dev Constructor that gives msg.sender all of initialSupply.
      * @param name_ The name of the token.
