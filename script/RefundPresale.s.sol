@@ -7,12 +7,12 @@ import "forge-std/console.sol";
 interface IPresale {
     function cancel() external returns (bool);
     function state() external view returns (uint8);
-     function refund() external returns (uint256);
+    function refund() external returns (uint256);
 }
 
 contract RefundPresale is Script {
     // Set your presale contract address here or load from env
-    address  PRESALE = vm.envAddress("PRESALE_ADDRESS");
+    address PRESALE = vm.envAddress("PRESALE_ADDRESS");
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");

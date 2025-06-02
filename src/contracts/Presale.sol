@@ -214,7 +214,7 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
         emit PresaleCreated(_creator, address(this), _token, _options.start, _options.end);
     }
 
-    function finalize() external nonReentrant onlyOwner whenNotPaused  returns (bool) {
+    function finalize() external nonReentrant onlyOwner whenNotPaused returns (bool) {
         if (state != PresaleState.Active) revert InvalidState(uint8(state));
         if (block.timestamp <= options.end) revert PresaleNotEnded();
         if (totalRaised < options.softCap) revert SoftCapNotReached();
@@ -270,7 +270,7 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
         return true;
     }
 
-    function withdraw() external onlyOwner nonReentrant {
+    function withdraw() external nonReentrant onlyOwner {
         if (state != PresaleState.Finalized) revert InvalidState(uint8(state));
         uint256 amount = ownerBalance;
         if (amount == 0) revert NoFundsToWithdraw();
@@ -313,11 +313,11 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
         emit Unpaused(msg.sender);
     }
 
-    function contribute(bytes32[] calldata _merkleProof) external payable nonReentrant whenNotPaused  {
+    function contribute(bytes32[] calldata _merkleProof) external payable nonReentrant whenNotPaused {
         _contribute(msg.sender, msg.value, _merkleProof);
     }
 
-    receive() external payable nonReentrant whenNotPaused  {
+    receive() external payable nonReentrant whenNotPaused {
         bytes32[] memory emptyProof;
         _contribute(msg.sender, msg.value, emptyProof);
     }
@@ -326,7 +326,6 @@ contract Presale is ReentrancyGuard, Ownable, IPresale {
         external
         nonReentrant
         whenNotPaused
-        
     {
         if (options.currency == address(0)) revert StablecoinNotAccepted();
         if (_amount == 0) revert ZeroAmount();

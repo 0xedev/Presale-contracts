@@ -38,7 +38,7 @@ interface IPresale {
 }
 
 contract FinalizePresale is Script {
-    address  PRESALE =  vm.envAddress("PRESALE_ADDRESS");
+    address PRESALE = vm.envAddress("PRESALE_ADDRESS");
 
     function run() external {
         // Load private key from env
