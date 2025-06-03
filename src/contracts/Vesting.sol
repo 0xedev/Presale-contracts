@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-// import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 contract Vesting is AccessControl, ReentrancyGuard {
@@ -14,6 +13,12 @@ contract Vesting is AccessControl, ReentrancyGuard {
     bytes32 public constant VESTER_ROLE = keccak256("VESTER_ROLE");
 
     bool public paused;
+
+    // beneficiary => list of presale addresses they have schedules under
+    mapping(address => address[]) public userVestingSchedules;
+
+    // Tracks if a presale address has already been added to a user's schedule list
+    mapping(address => mapping(address => bool)) private userHasSchedule;
 
     struct VestingSchedule {
         address tokenAddress;
@@ -52,8 +57,6 @@ contract Vesting is AccessControl, ReentrancyGuard {
     error InvalidAmount();
     error InvalidDuration();
     error NoTokensToRelease();
-    // error InvalidAddress();
-    // error NoTokensToRescue();
     error AlreadyPaused();
     error NotPaused();
 
@@ -86,6 +89,11 @@ contract Vesting is AccessControl, ReentrancyGuard {
             schedule.start = _start;
             schedule.duration = _duration;
             schedule.exists = true;
+
+            if (!userHasSchedule[_beneficiary][_presale]) {
+                userVestingSchedules[_beneficiary].push(_presale);
+                userHasSchedule[_beneficiary][_presale] = true;
+            }
         }
 
         IERC20 specificToken = IERC20(_tokenAddress);
@@ -136,10 +144,29 @@ contract Vesting is AccessControl, ReentrancyGuard {
         return schedule.totalAmount - schedule.released;
     }
 
+    function getUserSchedules(address _user) external view returns (VestingSchedule[] memory) {
+        address[] memory presales = userVestingSchedules[_user];
+        VestingSchedule[] memory schedulesList = new VestingSchedule[](presales.length);
+        for (uint256 i = 0; i < presales.length; i++) {
+            schedulesList[i] = schedules[presales[i]][_user];
+        }
+        return schedulesList;
+    }
+
+    function getUserPresales(address _user) external view returns (address[] memory) {
+        return userVestingSchedules[_user];
+    }
+
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (paused) revert AlreadyPaused();
         paused = true;
         emit Paused(msg.sender);
+    }
+
+    function rescueTokens(address token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(token != address(0) && to != address(0), "Invalid address");
+        IERC20(token).safeTransfer(to, amount);
+        emit TokensRescued(token, to, amount);
     }
 
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {

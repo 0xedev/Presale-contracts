@@ -7,6 +7,7 @@ import "../src/contracts/LiquidityLocker.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 // Mock ERC20 token for testing
 contract MockERC20 is ERC20 {
@@ -26,8 +27,12 @@ contract LiquidityLockerTest is Test {
     uint256 constant UNLOCK_TIME = 1 days;
 
     // Events for testing
-    event LiquidityLocked(address indexed token, uint256 amount, uint256 unlockTime, address indexed owner);
-    event LiquidityWithdrawn(address indexed token, uint256 amount, address indexed owner);
+    event LiquidityLocked(
+        uint256 indexed lockId, address indexed token, uint256 amount, uint256 unlockTime, address indexed owner
+    );
+    event LiquidityWithdrawn(uint256 indexed lockId, address indexed token, uint256 amount, address indexed owner);
+
+    error AccessControlUnauthorizedAccount(address account, bytes32 role);
 
     // Setup function to initialize contracts and accounts
     function setUp() public {
@@ -40,6 +45,9 @@ contract LiquidityLockerTest is Test {
 
         // Deploy LiquidityLocker
         locker = new LiquidityLocker();
+
+        // Grant LOCKER_ROLE to the owner (test contract)
+        locker.grantRole(locker.LOCKER_ROLE(), owner);
 
         // Transfer tokens to user1 for specific tests
         token.transfer(user1, 200 ether);
@@ -94,39 +102,51 @@ contract LiquidityLockerTest is Test {
 
     function testLockTokens() public {
         uint256 unlockTime = block.timestamp + UNLOCK_TIME;
-        uint256 balanceBefore = token.balanceOf(address(locker));
+        uint256 balanceBeforeLocker = token.balanceOf(address(locker));
+        uint256 balanceBeforeOwner = token.balanceOf(owner);
 
         // Verify owner has sufficient tokens
-        assertEq(token.balanceOf(owner), 800 ether, "Owner should have 800 ether"); // Adjusted based on setup
+        assertEq(balanceBeforeOwner, 800 ether, "Owner initial token balance incorrect");
 
-        // Log for debugging
-        emit log_named_address("Token address", address(token));
-        emit log_named_uint("Lock amount", LOCK_AMOUNT);
-        emit log_named_uint("Unlock time", unlockTime);
-        emit log_named_address("Lock owner", user1);
+        // Log for debugging (optional, but can be helpful)
+        emit log_named_address("Token address for lock", address(token));
+        emit log_named_uint("Lock amount for lock", LOCK_AMOUNT);
+        emit log_named_uint("Unlock time for lock", unlockTime);
+        emit log_named_address("Designated lock owner", user1);
 
-        // Direct call to lock with explicit approval
-        vm.startPrank(owner);
+        vm.startPrank(owner); // Prank as the contract owner (who has LOCKER_ROLE)
+
+        // 1. Approve tokens (this emits an Approval event, which we are not checking here)
         token.approve(address(locker), LOCK_AMOUNT);
-        emit log_named_uint("Owner allowance after approve", token.allowance(owner, address(locker)));
-        emit log_named_uint("Owner balance before lock", token.balanceOf(owner));
+        assertEq(token.allowance(owner, address(locker)), LOCK_AMOUNT, "Allowance not set correctly after approve");
 
-        // --- Expect Emit Moved Here ---
-        vm.expectEmit(true, true, false, true); // Check address(token), LOCK_AMOUNT, user1 (ignore unlockTime)
-        emit LiquidityLocked(address(token), LOCK_AMOUNT, unlockTime, user1);
-        // --- Expect Emit Moved Here ---
+        // 2. Set expectation for the LiquidityLocked event
+        // We want to check all indexed topics (lockId, token, owner) and the data (amount, unlockTime).
+        // lockId will be 0 for the first lock.
+        vm.expectEmit(true, true, true, true);
+        // This emit primes vm.expectEmit with the event signature and expected values for checked topics/data.
+        emit LiquidityLocked(0, address(token), LOCK_AMOUNT, unlockTime, user1);
 
-        locker.lock(address(token), LOCK_AMOUNT, unlockTime, user1); // Now this call is checked
+        // 3. Perform the lock operation (this should emit the LiquidityLocked event we're expecting)
+        locker.lock(address(token), LOCK_AMOUNT, unlockTime, user1);
+
         vm.stopPrank();
 
-        // Verify lock data
-        (address lockedToken, uint256 amount, uint256 time, address lockOwner) = locker.getLock(0);
-        assertEq(lockedToken, address(token), "Incorrect token address");
-        assertEq(amount, LOCK_AMOUNT, "Incorrect lock amount");
-        assertEq(time, unlockTime, "Incorrect unlock time");
-        assertEq(lockOwner, user1, "Incorrect lock owner");
-        assertEq(locker.lockCount(), 1, "Incorrect lock count");
-        assertEq(token.balanceOf(address(locker)), balanceBefore + LOCK_AMOUNT, "Incorrect locker balance");
+        // Verify lock data (already done in testLockTokensDebug, but good to have assertions)
+        (address lockedToken, uint256 lockedAmount, uint256 actualUnlockTime, address actualLockOwner) =
+            locker.getLock(0);
+        assertEq(lockedToken, address(token), "Incorrect token address in lock");
+        assertEq(lockedAmount, LOCK_AMOUNT, "Incorrect lock amount in lock");
+        assertEq(actualUnlockTime, unlockTime, "Incorrect unlock time in lock");
+        assertEq(actualLockOwner, user1, "Incorrect lock owner in lock");
+
+        assertEq(locker.lockCount(), 1, "Lock count should be 1 after lock");
+        assertEq(
+            token.balanceOf(address(locker)),
+            balanceBeforeLocker + LOCK_AMOUNT,
+            "Locker token balance incorrect after lock"
+        );
+        assertEq(token.balanceOf(owner), balanceBeforeOwner - LOCK_AMOUNT, "Owner token balance after lock incorrect");
     }
 
     // Test: Revert on invalid token address
@@ -163,9 +183,11 @@ contract LiquidityLockerTest is Test {
 
     // Test: Revert on non-owner calling lock
     function testRevertLockNonOwner() public {
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        vm.startPrank(user1);
+        token.approve(address(locker), LOCK_AMOUNT); // Ensure allowance so role check is hit
+        vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, user1, locker.LOCKER_ROLE()));
         locker.lock(address(token), LOCK_AMOUNT, block.timestamp + UNLOCK_TIME, user1);
+        vm.stopPrank();
     }
 
     // Test: Successful withdrawal after unlock time
@@ -177,8 +199,10 @@ contract LiquidityLockerTest is Test {
         vm.warp(unlockTime + 1);
 
         uint256 balanceBefore = token.balanceOf(user1);
-        vm.expectEmit(true, true, false, true);
-        emit LiquidityWithdrawn(address(token), LOCK_AMOUNT, user1);
+        // The lockId will be 0 for the first lock.
+        // checkTopic1 (lockId), checkTopic2 (token), checkTopic3 (owner), checkData (amount)
+        vm.expectEmit(true, true, true, true);
+        emit LiquidityWithdrawn(0, address(token), LOCK_AMOUNT, user1);
 
         vm.prank(user1);
         locker.withdraw(0);

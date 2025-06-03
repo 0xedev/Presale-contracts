@@ -511,23 +511,23 @@ contract PresaleTest is Test {
         assertEq(token.balanceOf(user), immediateTokens);
 
         // Check vesting at t=0 (post-finalize)
-        Vesting vesting = Vesting(factory.vestingContract());
+        Vesting localVesting = Vesting(factory.vestingContract()); // Renamed local variable
         vm.prank(user);
         vm.expectRevert(IVesting.NoTokensToRelease.selector);
-        vesting.release(address(presale));
+        localVesting.release(address(presale));
         assertEq(token.balanceOf(user), immediateTokens); // No vested tokens yet
 
         // Warp to t=30 days (50% vested)
         vm.warp(finalizeTime + 30 days);
         vm.prank(user);
-        vesting.release(address(presale));
+        localVesting.release(address(presale));
         uint256 vestedTokens = (5 ether * opts.presaleRate * 5000) / 10000 / 2; // 1250 tokens
         assertEq(token.balanceOf(user), immediateTokens + vestedTokens); // 2500 + 1250
 
         // Warp to t=60 days (100% vested)
         vm.warp(finalizeTime + 60 days);
         vm.prank(user);
-        vesting.release(address(presale));
+        localVesting.release(address(presale));
         uint256 totalVested = (5 ether * opts.presaleRate * 5000) / 10000; // 2500 tokens
         assertEq(token.balanceOf(user), immediateTokens + totalVested); // 2500 + 2500
     }
@@ -575,22 +575,22 @@ contract PresaleTest is Test {
         IERC20 lpToken = IERC20(pair);
 
         // Verify LP tokens are in LiquidityLocker
-        LiquidityLocker locker = LiquidityLocker(factory.liquidityLocker());
-        uint256 lockedBalance = lpToken.balanceOf(address(locker));
+        LiquidityLocker localLocker = LiquidityLocker(factory.liquidityLocker()); // Renamed local variable
+        uint256 lockedBalance = lpToken.balanceOf(address(localLocker));
         assertGt(lockedBalance, 0); // LP tokens are locked
 
         // Try to unlock before lockupDuration (should revert)
         vm.prank(owner);
         vm.expectRevert(ILiquidityLocker.TokensStillLocked.selector);
-        locker.withdraw(0);
+        localLocker.withdraw(0);
 
         // Warp to after lockupDuration
         vm.warp(block.timestamp + 30 days);
         vm.prank(owner);
-        locker.withdraw(0);
+        localLocker.withdraw(0);
 
         // Verify LP tokens are released
-        assertEq(lpToken.balanceOf(address(locker)), 0);
+        assertEq(lpToken.balanceOf(address(localLocker)), 0);
         assertEq(lpToken.balanceOf(owner), lockedBalance);
     }
 

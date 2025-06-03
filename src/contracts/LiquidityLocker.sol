@@ -21,9 +21,10 @@ contract LiquidityLocker is AccessControl, ReentrancyGuard {
     Lock[] public locks;
     mapping(address => uint256[]) public userLocks;
 
-  event LiquidityLocked(uint256 indexed lockId, address indexed token, uint256 amount, uint256 unlockTime, address indexed owner);
-event LiquidityWithdrawn(uint256 indexed lockId, address indexed token, uint256 amount, address indexed owner);
-
+    event LiquidityLocked(
+        uint256 indexed lockId, address indexed token, uint256 amount, uint256 unlockTime, address indexed owner
+    );
+    event LiquidityWithdrawn(uint256 indexed lockId, address indexed token, uint256 amount, address indexed owner);
 
     error InvalidTokenAddress();
     error ZeroAmount();
@@ -57,7 +58,7 @@ event LiquidityWithdrawn(uint256 indexed lockId, address indexed token, uint256 
     }
 
     // Rest of the contract remains unchanged
-    function withdraw(uint256 _lockId) external  nonReentrant{
+    function withdraw(uint256 _lockId) external nonReentrant {
         if (_lockId >= locks.length) revert InvalidLockId();
         Lock storage lockData = locks[_lockId];
         if (msg.sender != lockData.owner) revert NotLockOwner();
